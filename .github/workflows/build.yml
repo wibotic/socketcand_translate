@@ -26,6 +26,9 @@ jobs:
         path: '/'
         command: 'idf.py build'
     
+    - name: Test ls
+      run: find .
+    
     # If a tag was pushed, we should publish a release
     # using the action-gh-release action.
     - name: Release

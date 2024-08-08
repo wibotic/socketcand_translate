@@ -12,7 +12,7 @@ Client1 <---TCP Socketcand---> |---------------------------|
                                | esp32_socketcand_adapter  |
 Client2 <---TCP Socketcand---> |        running on         |
                                |     Olimex ESP32-EVB      |
-Physical CAN bus (can0) <--->  |---------------------------|
+Physical CAN bus (can0) <----> |---------------------------|
 ```
 
 ## Installation
