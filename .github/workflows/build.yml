@@ -18,6 +18,8 @@ jobs:
       with:
         submodules: 'recursive'
 
+    # Build the project using
+    # esp-idf-ci-action.
     - name: esp-idf build
       uses: espressif/esp-idf-ci-action@v1
       with:
@@ -26,8 +28,8 @@ jobs:
         path: '/'
         command: 'idf.py build'
     
-    # If a tag was pushed, we should publish a release
-    # using the action-gh-release action.
+    # If a tag was pushed, publish a release
+    # with the binaries produced by the previous step.
     - name: Release
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
