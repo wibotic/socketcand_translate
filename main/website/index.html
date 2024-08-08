@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang='en'>
+
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <link rel='icon' type='image/x-icon' href='data:image/png;base64,
+    AAABAAEAEBACAAAAAACwAAAAFgAAACgAAAAQAAAAIAAAAAEAAQAAAAAAQAAAAAAAAAAAAAAAAgAA
+    AAAAAAAAAAAAAPv/AAAAAAADwAAAD/AAABw4AAA73AAAN+wAAHfuAAB//gAAeZ4AAHmeAAA//AAA
+    P/wAAB/4AAAP8AAAA8AAAAAAAAD8PwAA8A8AAOAHAADAAwAAgAEAAIABAAAAAAAAAAAAAAAAAAAA
+    AAAAgAEAAIABAADAAwAA4AcAAPAPAAD8PwAA
+    '>
+    <title>Socketcand Adapter</title>
+    <script defer src='/alpine.js'></script>
+    <style>
+        body {
+            max-width: 1000px;
+            padding: 5pt;
+            margin: auto;
+            background-color: #ffe8ff;
+        }
+    </style>
+</head>
+
+<body>
+    <noscript>
+        <strong>
+            This site requires JavaScript. Please enable it.
+        </strong>
+    </noscript>
+    <h1>Socketcand Adapter</h1>
+    <p>This webpage is served by an ESP32-EVB Socketcand Adapter.</p>
+    <p>This adapter serves a minimal subset of
+        <a href='https://github.com/linux-can/socketcand/blob/master/doc/protocol.md'>Socketcand rawmode</a>.
+        on port 9999.
+    </p>
+
+    <h2>Status</h2>
+    <div x-data="{status: 'loading...', status_message: ''}" x-init="
+        console.log('initializing.');
+        try {
+            status = await (await fetch('/status')).json();
+            status_message = '';
+        } catch (error) {
+            status_message = `ERROR: Couldn't fetch status from server: ${error}`;
+        }
+        ">
+        <pre x-text="JSON.stringify(status, null, 2)"></pre>
+        <p style="background:#fff8ba;" x-text='status_message'></p>
+    </div>
+
+
+    <h2>Network Settings</h2>
+    <p>
+        The current configuration is in the input fields.
+        Change anything, and click submit to save the settings and reboot the adapter.
+        Only non-empty fields will be saved.
+        Incorrect configuration may cause the adapter to go offline.
+        In that case, hold button 1 for one second, to reset configuration back to defaults.
+    </p>
+
+    <form x-data='{ conf: {
+            eth_use_static: false,
+            eth_ip: "loading...",
+            eth_netmask: "loading...",
+            eth_gw: "loading...",
+            wifi_enabled: false,
+            wifi_ssid: "loading...",
+            wifi_pass: "",
+            wifi_use_static: false,
+            wifi_ip: "loading...",
+            wifi_netmask: "loading...",
+            wifi_gw: "loading...",
+            can_bitrate: 0
+        },
+        status_message: "loading..."
+    }' x-init="
+        console.log('initializing.');
+        try {
+            original_conf = await (await fetch('/config')).json();
+            Object.assign(conf, original_conf);
+            status_message = '';
+        } catch (error) {
+            status_message = `ERROR: Couldn't fetch settings from server: ${error}`;
+        }
+    " x-on:submit.prevent="
+        const post_obj = {};
+        let updated = false;
+        for (const key of Object.keys(conf)) {
+            const original_val = original_conf[key];
+            const val = conf[key];
+            if (val && val !== original_val) {
+                post_obj[key] = val;
+                updated = true;
+            }
+        }
+        if (updated === true) {
+            try {
+                const response = await fetch('/config', {
+                    method: 'POST',
+                    body: new URLSearchParams(post_obj)
+                });
+                status_message = await response.text();
+                if (response.ok) {
+                    location.reload();
+                }
+            } catch (error) {
+                status_message = `ERROR: Couldn't post settings to server: ${error}`;
+            }
+        } else {
+            status_message = 'No request sent because forms weren\'t updated.';
+        }
+        " action=''>
+
+
+        <label for='eth_use_static'>
+            Use static IP for ethernet (disables DHCP):
+        </label>
+        <input type='checkbox' id='eth_use_static' x-model='conf.eth_use_static'>
+        <br><br>
+
+        <label for='eth_ip'>
+            Ethernet static IP (if enabled):
+        </label>
+        <input type='text' id='eth_ip' x-model='conf.eth_ip'>
+        <br><br>
+
+        <label for='eth_netmask'>
+            Ethernet netmask IP (if enabled):
+        </label>
+        <input type='text' id='eth_netmask' x-model='conf.eth_netmask'>
+        <br><br>
+
+        <label for='eth_gw'>
+            Ethernet gateway IP (if enabled):
+        </label>
+        <input type='text' id='eth_gw' x-model='conf.eth_gw'>
+        <br><br>
+
+
+
+        <label for='wifi_enabled'>
+            Wifi enabled:
+        </label>
+        <input type='checkbox' id='wifi_enabled' x-model='conf.wifi_enabled'>
+        <br><br>
+
+        <label for='wifi_ssid'>
+            WIFI SSID name:
+        </label>
+        <input type='text' id='wifi_ssid' x-model='conf.wifi_ssid'>
+        <br><br>
+
+        <label for='wifi_pass'>
+            WIFI password (not shown):
+        </label>
+        <input type='password' id='wifi_pass' x-model='conf.wifi_pass'>
+        <br><br>
+
+
+        <label for='wifi_use_static'>
+            Use static IP for WIFI (disables DHCP):
+        </label>
+        <input type='checkbox' id='wifi_use_static' x-model='conf.wifi_use_static'>
+        <br><br>
+
+        <label for='wifi_ip'>
+            WIFI static IP (if enabled):
+        </label>
+        <input type='text' id='wifi_ip' x-model='conf.wifi_ip'>
+        <br><br>
+
+        <label for='wifi_netmask'>
+            WIFI netmask IP (if enabled):
+        </label>
+        <input type='text' id='wifi_netmask' x-model='conf.wifi_netmask'>
+        <br><br>
+
+        <label for='wifi_gw'>
+            WIFI gateway IP (if enabled):
+        </label>
+        <input type='text' id='wifi_gw' x-model='conf.wifi_gw'>
+        <br><br>
+
+
+
+        <label for='can_bitrate'>
+            CAN Bitrate in kbits
+            (supported: 25, 50, 100, 125, 250, 500, 800, 1000):
+        </label>
+        <input type='number' id='can_bitrate' x-model='conf.can_bitrate'>
+        <br><br>
+
+
+        <input type='submit' value='Submit'>
+
+        <p style="background:#fff8ba;" x-text='status_message'></p>
+
+    </form>
+
+</body>
+
+</html>
