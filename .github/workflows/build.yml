@@ -26,13 +26,14 @@ jobs:
         path: '/'
         command: 'idf.py build'
     
-    - name: Test ls
-      run: find .
-    
     # If a tag was pushed, we should publish a release
     # using the action-gh-release action.
     - name: Release
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: '*.bin'
+        files: |
+          build/bootloader/bootloader.bin
+          build/partition_table/partition-table.bin
+          build/esp32_socketcand_adapter.bin
+
