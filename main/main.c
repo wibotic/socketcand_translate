@@ -45,24 +45,37 @@ void app_main(void) {
   if (err == ESP_ERR_INVALID_ARG) {
     ESP_ERROR_CHECK(persistent_settings_save(&persistent_settings_default));
   }
-  driver_setup_can(&timing_config);
+
+  err = driver_setup_can(&timing_config);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "CRITICAL: Couldn't start CAN driver: %s", esp_err_to_name(err));
+  }
 
   // start wifi driver
   if (settings.wifi_enabled) {
     if (settings.wifi_use_static) {
-      driver_setup_wifi(&settings.wifi_ip_info, settings.wifi_ssid,
+      err = driver_setup_wifi(&settings.wifi_ip_info, settings.wifi_ssid,
                         settings.wifi_pass);
     } else {
-      driver_setup_wifi(NULL, settings.wifi_ssid, settings.wifi_pass);
+      err = driver_setup_wifi(NULL, settings.wifi_ssid, settings.wifi_pass);
+    }
+
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "CRITICAL: Couldn't start WIFI driver: %s", esp_err_to_name(err));
     }
   }
 
   // start ethernet driver
   if (settings.eth_use_static) {
-    driver_setup_ethernet(&settings.eth_ip_info);
+    err = driver_setup_ethernet(&settings.eth_ip_info);
   } else {
-    driver_setup_ethernet(NULL);
+    err = driver_setup_ethernet(NULL);
   }
+
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "CRITICAL: Couldn't start ethernet driver: %s", esp_err_to_name(err));
+  }
+
 
   // start HTTP server used for configuring stuff
   start_http_server();

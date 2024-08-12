@@ -1,61 +1,58 @@
-#include "driver_setup.h"
-
 #include "driver/gpio.h"
 #include "driver/twai.h"
-#include "esp_check.h"
 #include "esp_eth.h"
-#include "esp_eth_driver.h"
 #include "esp_event.h"
 #include "esp_log.h"
-#include "esp_mac.h"
-#include "esp_netif.h"
 #include "esp_wifi.h"
+#include "esp_check.h"
 #include "memory.h"
 
-// A pointer to the ethernet netif object.
-// NULL if ethernet wasn't started.
-esp_netif_t *driver_setup_eth_netif = NULL;
+#include "driver_setup.h"
 
-// A pointer to the WIFI netif object.
-// NULL if WIFI wasn't started.
+esp_netif_t *driver_setup_eth_netif = NULL;
 esp_netif_t *driver_setup_wifi_netif = NULL;
 
-// Static memory for the can_recovery_task stack.
-static StackType_t can_recovery_task_stack[4096];
-
-// Static memory for the can_recovery_task.
-static StaticTask_t can_recovery_task_mem;
-
-// Semaphore that specifies when the internet is ready
+// Semaphore that gets set by an event handler
+// when the internet driver is fully running
 static SemaphoreHandle_t internet_ready = NULL;
 
 // Name that will be used for logging
 static const char *TAG = "driver_setup";
 
-// Event handler purely for logging debugging information.
+// Ethernet event handler. Sets `internet_ready` when the driver has
+// been started.
 static void ethernet_event_handler(void *arg, esp_event_base_t event_base,
                                    int32_t event_id, void *event_data);
+
+// Ethernet event handler. Sets `internet_ready` when the driver has
+// been started.
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data);
+
+// Logs information whenever acquired IP.
 static void ip_event_handler(void *arg, esp_event_base_t event_base,
                              int32_t event_id, void *event_data);
 
-// A FreeRTOS task that gets spawned by
-// `driver_setup_can()`.
+// A FreeRTOS task that gets spawned by `driver_setup_can()`.
+// It initiates CAN recovery mode whenever
+// the bus is disconnected due to excessive error count.
 static void can_recovery_task(void *pvParameters);
+static StackType_t can_recovery_task_stack[4096];
+static StaticTask_t can_recovery_task_mem;
 
 // Prints the status of `netif` to `buf` in JSON format.
 // Returns the number of bytes written, or -1 if ran out of space.
 static int print_netif_status(esp_netif_t *netif, char *buf_out, size_t buflen);
 
-void driver_setup_ethernet(const esp_netif_ip_info_t *ip_info) {
+esp_err_t driver_setup_ethernet(const esp_netif_ip_info_t *ip_info) {
+  esp_err_t err;
   // Based on:
   // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_eth.html
 
   // Check if the ethernet driver has already been started
   if (driver_setup_eth_netif != NULL) {
-    ESP_LOGE(TAG, "Can only call driver_setup_ethernet() one time. Aborting.");
-    abort();
+    ESP_LOGE(TAG, "driver_setup_eth_netif is already initialized.");
+    return ESP_FAIL;
   }
 
   //// Create an ethernet MAC object ////
@@ -66,7 +63,10 @@ void driver_setup_ethernet(const esp_netif_ip_info_t *ip_info) {
   // 18 based on ESP32-EVB schematic
   esp32_emac_config.smi_mdio_gpio_num = 18;
   esp_eth_mac_t *mac = esp_eth_mac_new_esp32(&esp32_emac_config, &mac_config);
-  assert(mac);
+  if (mac == NULL) {
+    ESP_LOGE(TAG, "Couldn't create Ethernet MAC object.");
+    return ESP_FAIL;
+  }
 
   //// Create an ethernet PHY object ////
   eth_phy_config_t phy_config = ETH_PHY_DEFAULT_CONFIG();
@@ -75,103 +75,136 @@ void driver_setup_ethernet(const esp_netif_ip_info_t *ip_info) {
   // ESP32-EVB schematic says PHY reset is unconnected
   phy_config.reset_gpio_num = -1;
   esp_eth_phy_t *phy = esp_eth_phy_new_lan87xx(&phy_config);
-  assert(phy);
+  if (phy == NULL) {
+    ESP_LOGE(TAG, "Couldn't create Ethernet PHY object.");
+    return ESP_FAIL;
+  }
 
   //// Get an eth_handle by installing the driver ////
   esp_eth_config_t eth_config = ETH_DEFAULT_CONFIG(mac, phy);
   esp_eth_handle_t eth_handle = NULL;
-  ESP_ERROR_CHECK(esp_eth_driver_install(&eth_config, &eth_handle));
+  err = esp_eth_driver_install(&eth_config, &eth_handle);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't install ethernet driver.");
 
   //// Create netif object ////
   esp_netif_config_t netif_config = ESP_NETIF_DEFAULT_ETH();
   esp_netif_t *esp_netif = esp_netif_new(&netif_config);
-  assert(esp_netif);
+  if (esp_netif == NULL) {
+    ESP_LOGE(TAG, "Couldn't create Ethernet ESP-NETIF object.");
+    return ESP_FAIL;
+  }
 
   //// Set static IP info if needed ////
   if (ip_info != NULL) {
-    ESP_ERROR_CHECK(esp_netif_dhcpc_stop(esp_netif));
-    ESP_ERROR_CHECK(esp_netif_set_ip_info(esp_netif, ip_info));
+    err = esp_netif_dhcpc_stop(esp_netif);
+    ESP_RETURN_ON_ERROR(err, TAG, "Couldn't stop DHCPC to set up static IP.");
+    err = esp_netif_set_ip_info(esp_netif, ip_info);
+    ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set ethernet IP info.");
   }
 
   // Register event handlers for debugging purposes
-  ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID,
-                                             &ethernet_event_handler, NULL));
-  ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP,
-                                             &ip_event_handler, NULL));
+  err = esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID,
+                                             &ethernet_event_handler, NULL);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register ethernet event handler.");
+  
+  err = esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP,
+                                             &ip_event_handler, NULL);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register IP event handler.");
 
   //// Attach the ethernet object to ESP netif ////
   esp_eth_netif_glue_handle_t eth_netif_glue =
       esp_eth_new_netif_glue(eth_handle);
-  ESP_ERROR_CHECK(esp_netif_attach(esp_netif, eth_netif_glue));
+  
+  err = esp_netif_attach(esp_netif, eth_netif_glue);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't attach ethernet to ESP netif.");
 
   //// Start ethernet ////
   internet_ready = xSemaphoreCreateBinary();
-  ESP_ERROR_CHECK(esp_eth_start(eth_handle));
+  err = esp_eth_start(eth_handle);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't start ethernet.");
 
   /// Wait for internet to actually work ////
-  if (xSemaphoreTake(internet_ready, pdMS_TO_TICKS(20000)) == pdFALSE) {
+  if (xSemaphoreTake(internet_ready, pdMS_TO_TICKS(10000)) == pdFALSE) {
     ESP_LOGE(TAG,
-             "Couldn't connect to the internet for 20 seconds. Restarting.");
-    abort();
+             "Couldn't start ethernet driver in 10 seconds.");
+    return ESP_FAIL;
   }
   vSemaphoreDelete(internet_ready);
 
   driver_setup_eth_netif = esp_netif;
+  return ESP_OK;
 }
 
-void driver_setup_wifi(const esp_netif_ip_info_t *ip_info, const char ssid[32],
+esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info, const char ssid[32],
                        const char password[64]) {
+  esp_err_t err;
   // Check if the ethernet driver has already been started
   if (driver_setup_wifi_netif != NULL) {
     ESP_LOGE(TAG, "Can only call driver_setup_wifi() one time. Aborting.");
-    abort();
+    return ESP_FAIL;
   }
 
   //// Create netif object ////
   esp_netif_t *esp_netif = esp_netif_create_default_wifi_sta();
-  assert(esp_netif);
+    if (esp_netif == NULL) {
+    ESP_LOGE(TAG, "Couldn't create WIFI ESP-NETIF object. Aborting.");
+    return ESP_FAIL;
+  }
 
   //// Set static IP info if needed ////
   if (ip_info != NULL) {
-    ESP_ERROR_CHECK(esp_netif_dhcpc_stop(esp_netif));
-    ESP_ERROR_CHECK(esp_netif_set_ip_info(esp_netif, ip_info));
+    err = esp_netif_dhcpc_stop(esp_netif);
+    ESP_RETURN_ON_ERROR(err, TAG, "Couldn't stop WIFI dhcp to set up static IP.");
+    err = esp_netif_set_ip_info(esp_netif, ip_info);
+    ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set IP info for WIFI.");
   }
 
   //// Initialize the wifi driver ////
   wifi_init_config_t wifi_init_config = WIFI_INIT_CONFIG_DEFAULT();
-  ESP_ERROR_CHECK(esp_wifi_init(&wifi_init_config));
+  err = esp_wifi_init(&wifi_init_config);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't initialize WIFI");
 
   /// Configure the wifi driver ////
   wifi_config_t wifi_config = {0};
   memcpy(wifi_config.sta.ssid, ssid, 32);
   memcpy(wifi_config.sta.password, password, 64);
   wifi_config.sta.failure_retry_cnt = 2;
-  ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-  ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+
+  err = esp_wifi_set_mode(WIFI_MODE_STA);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set WIFI to station mode.");
+  err = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't configure WIFI.");
 
   // Register event handlers for debugging purposes
-  ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
-                                             &wifi_event_handler, NULL));
-  ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-                                             &ip_event_handler, NULL));
+  err = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                             &wifi_event_handler, NULL);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register WIFI handler.");
+  err = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+                                             &ip_event_handler, NULL);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register IP handler.");
 
   // Connect to wifi
   internet_ready = xSemaphoreCreateBinary();
-  ESP_ERROR_CHECK(esp_wifi_start());
-  ESP_ERROR_CHECK(esp_wifi_connect());
+  err = esp_wifi_start();
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't start WIFI.");
+  err = esp_wifi_connect();
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't connect to WIFI.");
 
   //// Wait for internet to actually work ////
   if (xSemaphoreTake(internet_ready, pdMS_TO_TICKS(10000)) == pdFALSE) {
     ESP_LOGE(TAG,
-             "Couldn't start the internet driver for 10 seconds. Restarting.");
-    abort();
+             "Couldn't start WIFI driver in 10 seconds.");
+    return ESP_FAIL;
   }
   vSemaphoreDelete(internet_ready);
 
   driver_setup_wifi_netif = esp_netif;
+  return ESP_OK;
 }
 
-void driver_setup_can(const twai_timing_config_t *timing_config) {
+esp_err_t driver_setup_can(const twai_timing_config_t *timing_config) {
+  esp_err_t err;
+
   twai_general_config_t g_config =
       TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_5, GPIO_NUM_35, TWAI_MODE_NORMAL);
   // Change this line to enable/disable logging:
@@ -182,16 +215,20 @@ void driver_setup_can(const twai_timing_config_t *timing_config) {
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
   // Install TWAI driver
-  ESP_ERROR_CHECK(twai_driver_install(&g_config, timing_config, &f_config));
+  err = twai_driver_install(&g_config, timing_config, &f_config);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't install CAN driver.");
 
   // Start TWAI driver
-  ESP_ERROR_CHECK(twai_start());
+  err = twai_start();
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't start CAN driver.");
 
   // Spawn a task that will put CAN in recovery mode
   // whenever it enters BUS_OFF state.
   xTaskCreateStatic(can_recovery_task, "can_recovery",
                     sizeof(can_recovery_task_stack), NULL, 0,
                     can_recovery_task_stack, &can_recovery_task_mem);
+  
+  return ESP_OK;
 }
 
 static void ethernet_event_handler(void *arg, esp_event_base_t event_base,
@@ -216,6 +253,7 @@ static void ethernet_event_handler(void *arg, esp_event_base_t event_base,
       ESP_LOGE(TAG, "Ethernet Stopped");
       break;
     default:
+      ESP_LOGE(TAG, "Unrecognized ethernet event.");
       break;
   }
 }
@@ -233,9 +271,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     case WIFI_EVENT_STA_DISCONNECTED:
       ESP_LOGE(TAG, "WIFI station disconnected.");
       break;
-    case IP_EVENT_STA_GOT_IP:
-      ESP_LOGD(TAG, "WIFI got IP.");
-      break;
     default:
       break;
   }
@@ -246,6 +281,15 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base,
   const ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
   const esp_netif_ip_info_t *ip_info = &event->ip_info;
   ESP_LOGI(TAG, "----- Got IP Address -----");
+
+  const char* hostname;
+  esp_err_t err = esp_netif_get_hostname(event->esp_netif, &hostname);
+  if (err == ESP_OK) {
+    ESP_LOGI(TAG, "Hostname: %s", hostname);
+  } else {
+    ESP_LOGE(TAG, "Couldn't get ESP hostname: %s", esp_err_to_name(err));
+  }
+
   ESP_LOGI(TAG, "IP:       " IPSTR, IP2STR(&ip_info->ip));
   ESP_LOGI(TAG, "Net mask: " IPSTR, IP2STR(&ip_info->netmask));
   ESP_LOGI(TAG, "Gateway:  " IPSTR, IP2STR(&ip_info->gw));
@@ -253,15 +297,29 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base,
 }
 
 static void can_recovery_task(void *pvParameters) {
+  esp_err_t err;
+  // Constantly initiate recovery if needed.
   while (true) {
+    // Read TWAI alerts
     uint32_t alerts;
-    ESP_ERROR_CHECK(twai_read_alerts(&alerts, portMAX_DELAY));
+    while (true) {
+      err = twai_read_alerts(&alerts, portMAX_DELAY);
+      if (err == ESP_OK) {
+        break;
+      } else {
+        ESP_LOGE(TAG, "Couldn't read CAN alerts: %s", esp_err_to_name(err));
+      }
+    }
+    // If the bus is off, enter recovery mode.
     if ((alerts & TWAI_ALERT_BUS_OFF) != 0) {
-      ESP_LOGE(TAG, "Initiating CAN recovery.");
-      ESP_ERROR_CHECK(twai_initiate_recovery());
+      err = twai_initiate_recovery();
+      if (err == ESP_OK) {
+        ESP_LOGE(TAG, "Initiated CAN recovery.");
+      } else {
+        ESP_LOGE(TAG, "Couldn't initiate CAN recovery: %s", esp_err_to_name(err));
+      }
     }
   }
-  abort();
 }
 
 int driver_setup_get_status_json(char *buf_out, size_t buflen) {
