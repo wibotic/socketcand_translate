@@ -21,14 +21,24 @@ esp_err_t driver_setup_ethernet(const esp_netif_ip_info_t* ip_info);
 // Starts the ESP32-EVB wifi driver and populates `driver_setup_wifi_netif`.
 // `ip_info` specifies the static IP address config.
 // Uses DHCP if `ip_info` is NULL.
-esp_err_t driver_setup_wifi(const esp_netif_ip_info_t* ip_info, const char ssid[32],
-                       const char password[64]);
+esp_err_t driver_setup_wifi(const esp_netif_ip_info_t* ip_info,
+                            const char ssid[32], const char password[64]);
 
 // Starts the ESP32-EVB CAN driver with the given `timing_config`.
 esp_err_t driver_setup_can(const twai_timing_config_t* timing_config);
 
-// Print the network status as a JSON null-terminated C-string to `buf_out`.
-// `buflen` is the length of `buf_out`.
-// Returns the number of characters written.
-// Returns -1 if `buflen` was too small to fit the string.
-int driver_setup_get_status_json(char* buf_out, size_t buflen);
+// Returns a pointer to a C-string containing a
+// JSON of the current network status.
+// Returns NULL on error.
+// Since the string is in a shared buffer,
+// this function will block if another task is also
+// currently reading the status.
+// Once the caller is done using the returned
+// C-string, they must call
+// `driver_setup_release_json_status()` to
+// allow other callers to access the status.
+const char* driver_setup_get_status_json(void);
+
+// Must be called once finished using the buffer
+// returned by `driver_setup_get_status_json()`.
+esp_err_t driver_setup_release_json_status(void);

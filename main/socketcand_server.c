@@ -7,7 +7,13 @@
 #include "lwip/sockets.h"
 #include "socketcand_translate.h"
 
-// Maximum number of TCP socketcand connections
+// Name that will be used for logging
+static const char *TAG = "socketcand_server";
+
+// The length of the `can_rx_queue` in each `client_handler_data_t`.
+#define CAN_RX_QUEUE_LENGTH 32
+
+// Maximum number of TCP socketcand client connections
 // that can be served simultaneously before new connections
 // are dropped.
 #define MAX_CLIENTS 5
@@ -15,32 +21,88 @@
 // Stack size allocated for every FreeRTOS task.
 #define STACK_SIZE 4096
 
-// `can_listener_task` pushes frames from the CAN bus
-// onto all the active queues.
-// Each `serve_client_task` then pops from the queue at its assigned index.
-static QueueHandle_t can_bus_queues[MAX_CLIENTS] = {0};
+// Set the `socketcand_translate_frame_t` `user_data` value
+// to this, to indicate this is a normal CAN bus frame.
+#define SOCKETCAND_NORMAL_FRAME 0
 
-// An array of socketcand messengers.
-// Each `server_client_task` uses the one at its assigned index.
-// Unused messengers have `socket_fd` set to -1.
-static frame_io_messenger task_frame_messengers[MAX_CLIENTS];
+// Set the `socketcand_translate_frame_t` `user_data` value
+// to this, to indicate this isn't a CAN bus frame.
+// If a task pops this off the queue, that means it should
+// exit and disconnect from its TCP client.
+#define SOCKETCAND_INTERRUPT_FRAME 1
 
-// Name that will be used for logging
-static const char *TAG = "socketcand_server";
+// Data that tasks serving a client get a pointer to.
+typedef struct {
+  // The `can_listener_task` pushes `socketcand_translate_frame_t`s
+  // from the CAN bus onto all the active `can_rx_queue`s.
+  // Each `serve_client_task` then pops from the queue at its assigned index.
+  QueueHandle_t can_rx_queue;
 
-// Task that continuously runs the server
+  // The data structure that `can_rx_queue` uses.
+  StaticQueue_t can_rx_queue_buffer;
+
+  // The storage that `can_rx_queue` uses.
+  uint8_t can_rx_queue_storage[CAN_RX_QUEUE_LENGTH *
+                               sizeof(socketcand_translate_frame_t)];
+
+  // Messenger used for communicating with TCP client.
+  frame_io_messenger tcp_messenger;
+
+  // Mutex that tasks serving the client take
+  // during the critical section of closing the connection and deleting
+  // themselves.
+  SemaphoreHandle_t handler_task_delete_mutex;
+
+  // FreeRTOS memory for the `handler_task_delete_mutex`.
+  StaticSemaphore_t handler_task_delete_mutex_mem;
+
+  // FreeRTOS stack for the first task serving this client.
+  StackType_t free_rtos_stack_1[STACK_SIZE];
+
+  // FreeRTOS memory for the first task serving this client.
+  StaticTask_t free_rtos_mem_1;
+
+  // FreeRTOS stack for the second task serving this client.
+  StackType_t free_rtos_stack_2[STACK_SIZE];
+
+  // FreeRTOS memory for the second task serving this client.
+  StaticTask_t free_rtos_mem_2;
+
+} client_handler_data_t;
+
+// An array of `client_handler_data_t`. Each group of tasks handling
+// a client gets assigned a pointer to one of the elements.
+static client_handler_data_t client_handler_datas[MAX_CLIENTS];
+
+// This queue stores pointers to all unused `client_handler_data_t`
+// in the array `client_handler_datas`.
+//
+// An item is popped when spawning a new task to handle a client,
+// and pushed again once the client disconnects.
+static QueueHandle_t unused_client_handler_data_queue = NULL;
+StaticQueue_t unused_client_handler_data_queue_buffer;
+uint8_t
+    unused_client_handler_data_queue_storage[MAX_CLIENTS *
+                                             sizeof(client_handler_data_t *)];
+
+// Task that continuously listens for incoming TCP connections.
 // pvParameters should be a listener socket FD.
 static void run_server_task(void *pvParameters);
+static StackType_t run_server_task_stack[STACK_SIZE];
+static StaticTask_t run_server_task_mem;
 
 // Task that continuously pushes messages from the CAN bus
-// onto all the active `can_bus_queues`.
+// onto all the active `can_rx_queue`s.
 static void can_listener_task(void *pvParameters);
+static StackType_t can_listener_task_stack[STACK_SIZE];
+static StaticTask_t can_listener_task_mem;
 
-// Pushes the message to all of the active `can_bus_queues`.
+// Pushes the `message` to all of the active `can_rx_queue`s.
 // This will cause it to be sent to all TCP socketcand clients EXCEPT
-// for `skip_client_i`, which will be omitted.
-static void enqueue_can_message(socketcand_translate_frame *message,
-                                int skip_client_i);
+// for `skip_client`, which will be omitted.
+// Set `skip_client` to `NULL` to not skip any clients.
+static void enqueue_can_message(socketcand_translate_frame_t *message,
+                                const client_handler_data_t *skip_client);
 
 // Task that serves a client.
 // pvParameters should be the index of the client.
@@ -54,9 +116,10 @@ static void socketcand_to_bus_task(void *pvParameters);
 // pvParameters should be the index of the client.
 static void bus_to_socketcand_task(void *pvParameters);
 
-// Deletes the the serve client task that called this function
-// and resets its `frame_io_messenger` socket fd to -1.
-static void delete_serve_client_task(int client_i);
+// Deletes one of the two tasks that are using `client_handler_data`.
+// See comments inside the function for more details.
+static void delete_serve_client_task(
+    client_handler_data_t *client_handler_data);
 
 esp_err_t socketcand_server_start(uint16_t port) {
   // create a TCP socket
@@ -96,36 +159,70 @@ esp_err_t socketcand_server_start(uint16_t port) {
     return ESP_FAIL;
   }
 
-  // Log the socket we're listening on
-  struct sockaddr_in local_addr;
-  socklen_t local_addr_size = sizeof(local_addr);
-  err = getsockname(listen_sock, (struct sockaddr *)&local_addr,
-                    &local_addr_size);
-  if (err != 0) {
-    ESP_LOGE(TAG, "Unable to get local socket address: errno %d", errno);
-    close(listen_sock);
-    return ESP_FAIL;
-  }
-  char addr_str[128];
-  inet_ntoa_r(local_addr.sin_addr, addr_str, sizeof(addr_str) - 1);
-  ESP_LOGI(TAG, "Started TCP server listening on %s:%d", addr_str,
-           ntohs(local_addr.sin_port));
+  // Log that we've started listening.
+  ESP_LOGD(TAG, "Started socketcand TCP server listening on %s:%d",
+           inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
 
-  // Initialize `can_bus_queues` and `task_frame_messengers`.
+  // Initialize `client_handler_datas`.
   for (int i = 0; i < MAX_CLIENTS; i++) {
-    can_bus_queues[i] = xQueueCreate(32, sizeof(socketcand_translate_frame));
-    task_frame_messengers[i].socket_fd = -1;
+    client_handler_datas[i].can_rx_queue = xQueueCreateStatic(
+        CAN_RX_QUEUE_LENGTH, sizeof(socketcand_translate_frame_t),
+        client_handler_datas[i].can_rx_queue_storage,
+        &client_handler_datas[i].can_rx_queue_buffer);
+
+    if (client_handler_datas[i].can_rx_queue == NULL) {
+      ESP_LOGE(TAG, "Unreachable. A can_rx_queue couldn't be created.");
+      abort();
+    }
+
+    client_handler_datas[i].tcp_messenger.socket_fd = -1;
+
+    client_handler_datas[i].handler_task_delete_mutex =
+        xSemaphoreCreateMutexStatic(
+            &client_handler_datas[i].handler_task_delete_mutex_mem);
+    if (client_handler_datas[i].handler_task_delete_mutex == NULL) {
+      ESP_LOGE(TAG,
+               "Unreachable. A handler_task_delete_mutex couldn't be created.");
+      abort();
+    }
+  }
+
+  // initialize the queue that holds all the unused client_handler_data
+  unused_client_handler_data_queue =
+      xQueueCreateStatic(MAX_CLIENTS, sizeof(client_handler_data_t *),
+                         unused_client_handler_data_queue_storage,
+                         &unused_client_handler_data_queue_buffer);
+
+  if (unused_client_handler_data_queue == NULL) {
+    ESP_LOGE(
+        TAG,
+        "Unreachable. unused_client_handler_data_queue couldn't be created.");
+    abort();
+  }
+
+  for (int i = 0; i < MAX_CLIENTS; i++) {
+    const client_handler_data_t *pointer_to_client_handler_data =
+        &client_handler_datas[i];
+    if (xQueueSend(unused_client_handler_data_queue,
+                   &pointer_to_client_handler_data, 0) != pdTRUE) {
+      ESP_LOGE(TAG,
+               "Unreachable. unused_client_handler_data_queue should have "
+               "MAX_CLIENT slots.");
+      abort();
+    }
   }
 
   // Task that continuously pushes messages from the CAN bus
-  // onto all the active `can_bus_queues`.
-  xTaskCreate(can_listener_task, "can_listener_task", STACK_SIZE,
-              (void *)listen_sock, 2, NULL);
+  // onto all the active can_rx_queues.
+  xTaskCreateStatic(can_listener_task, "can_listener_task",
+                    sizeof(can_listener_task_stack), NULL, 14,
+                    can_listener_task_stack, &can_listener_task_mem);
 
-  // Task that continuously runs the server
+  // Task that continuously listens for incoming TCP connections.
   // pvParameters is set to the listener socket FD.
-  xTaskCreate(run_server_task, "socketcand_server", STACK_SIZE,
-              (void *)listen_sock, 1, NULL);
+  xTaskCreateStatic(run_server_task, "socketcand_server",
+                    sizeof(run_server_task_stack), (void *)listen_sock, 6,
+                    run_server_task_stack, &run_server_task_mem);
 
   return ESP_OK;
 }
@@ -136,7 +233,7 @@ static void run_server_task(void *pvParameters) {
   // Run the server
   while (true) {
     // Accept an incoming connection.
-    struct sockaddr_in6 source_addr;
+    struct sockaddr_in source_addr;
     socklen_t addr_len = sizeof(source_addr);
     int client_sock =
         accept(listen_sock, (struct sockaddr *)&source_addr, &addr_len);
@@ -146,23 +243,18 @@ static void run_server_task(void *pvParameters) {
     }
 
     // Log the origin of the incoming connection
-    char addr_str[128];
-    inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, addr_str,
-                sizeof(addr_str));
     ESP_LOGI(TAG, "Accepted socketcand client TCP connectrion from: %s",
-             addr_str);
+             inet_ntoa(source_addr.sin_addr));
 
-    // Find a free index to assign to this connection
-    int client_i = -1;
-    for (int i = 0; i < MAX_CLIENTS; i++) {
-      if (task_frame_messengers[i].socket_fd == -1) {
-        client_i = i;
-        break;
-      }
-    }
+    // Assign a pointer to an unused `client_handler_data_t` to the task
+    // about to be spawned.
+    client_handler_data_t *client_handler_data = NULL;
 
-    // drop the connection if no free index is available
-    if (client_i == -1) {
+    BaseType_t res = xQueueReceive(unused_client_handler_data_queue,
+                                   &client_handler_data, 0);
+
+    // if all the handler data is already in use
+    if (res != pdTRUE) {
       ESP_LOGE(TAG,
                "Dropping socketcand TCP connection because reached limit of %d "
                "simultaneous clients.",
@@ -173,85 +265,98 @@ static void run_server_task(void *pvParameters) {
     }
 
     // set up the frame messenger and queue for this index
-    task_frame_messengers[client_i].l = 0;
-    task_frame_messengers[client_i].r = 0;
-    task_frame_messengers[client_i].socket_fd = client_sock;
-    xQueueReset(can_bus_queues[client_i]);
+    client_handler_data->tcp_messenger.l = 0;
+    client_handler_data->tcp_messenger.r = 0;
+    client_handler_data->tcp_messenger.socket_fd = client_sock;
+
+    xQueueReset(client_handler_data->can_rx_queue);
 
     // spawn a thread to serve the client with this index
-    xTaskCreate(serve_client_task, "serving_socketcand_client", STACK_SIZE,
-                (void *)client_i, 15, NULL);
+    xTaskCreateStatic(serve_client_task, "serving_socketcand_client",
+                      sizeof(client_handler_data->free_rtos_stack_1),
+                      (void *)client_handler_data, 10,
+                      client_handler_data->free_rtos_stack_1,
+                      &client_handler_data->free_rtos_mem_1);
   }
   vTaskDelete(NULL);
 }
 
 static void serve_client_task(void *pvParameters) {
-  int client_i = (int)pvParameters;
+  client_handler_data_t *client_handler_data =
+      (client_handler_data_t *)pvParameters;
 
   // Establish a socketcand rawmode connection
-  char frame_str[SOCKETCAND_BUF_LEN] = "";
+  char frame_str[SOCKETCAND_RAW_MAX_LEN] = "";
   while (true) {
     // write a handshake frame
-    int phase = socketcand_translate_open_raw(frame_str);
-    frame_io_write_str(task_frame_messengers[client_i].socket_fd, frame_str);
+    int phase = socketcand_translate_open_raw(frame_str, sizeof(frame_str));
+    frame_io_write_str(client_handler_data->tcp_messenger.socket_fd, frame_str);
 
     if (phase == -1) {
       ESP_LOGE(TAG,
-               "Unexpected socketcand message while negotiating rawmode. "
-               "Closing connection.");
-      delete_serve_client_task(client_i);
+               "Buffer too small when negotiating socketcand rawmode. Closing "
+               "connection.");
+      delete_serve_client_task(client_handler_data);
+      return;
+    } else if (phase == 0) {
+      ESP_LOGE(TAG,
+               "Client sent unknown socketcand message '%s 'while negotiating "
+               "rawmode. "
+               "Closing connection.",
+               frame_str);
+      delete_serve_client_task(client_handler_data);
       return;
     } else if (phase == 3) {
       break;  // socketcand rawmode successfully established
     }
 
-    // read a frame from the client
-    if (frame_io_read_next_frame(&task_frame_messengers[client_i], frame_str) ==
-        -1) {
+    // read the next < > frame from the client
+    esp_err_t err = frame_io_read_next_frame(
+        &client_handler_data->tcp_messenger, frame_str, sizeof(frame_str));
+    if (err != ESP_OK) {
       ESP_LOGI(
           TAG,
           "Error reading socketcand frame from client. Closing connection.");
-      delete_serve_client_task(client_i);
+      delete_serve_client_task(client_handler_data);
       return;
     }
   }
 
   // run translation in both directions simultaneously
-  xTaskCreate(bus_to_socketcand_task, "bus_to_socketcand", STACK_SIZE,
-              pvParameters, 15, NULL);
-  xTaskCreate(socketcand_to_bus_task, "socketcand_to_bus", STACK_SIZE,
-              pvParameters, 15, NULL);
-
-  // delete own task
-  vTaskDelete(NULL);
+  xTaskCreateStatic(bus_to_socketcand_task, "bus_to_socketcand",
+                    sizeof(client_handler_data->free_rtos_stack_2),
+                    pvParameters, 10, client_handler_data->free_rtos_stack_2,
+                    &client_handler_data->free_rtos_mem_2);
+  socketcand_to_bus_task(pvParameters);
 }
 
 static void socketcand_to_bus_task(void *pvParameters) {
-  int client_i = (int)pvParameters;
+  client_handler_data_t *client_handler_data =
+      (client_handler_data_t *)pvParameters;
 
   // A single C string storing a complete frame.
-  char frame_str[SOCKETCAND_BUF_LEN];
+  char frame_str[SOCKETCAND_RAW_MAX_LEN];
 
   while (true) {
     // Try to read the next < > frame from the network.
-    int bytes_read =
-        frame_io_read_next_frame(&task_frame_messengers[client_i], frame_str);
-    if (bytes_read == -1) {
+    esp_err_t err = frame_io_read_next_frame(
+        &client_handler_data->tcp_messenger, frame_str, sizeof(frame_str));
+    if (err != ESP_OK) {
       ESP_LOGD(TAG, "Couldn't read the next < > frame from socketcand.");
-      delete_serve_client_task(client_i);
+      delete_serve_client_task(client_handler_data);
       return;
     }
 
     // Parse the message
-    socketcand_translate_frame received_msg;
+    socketcand_translate_frame_t received_msg;
     if (socketcand_translate_string_to_frame(frame_str, &received_msg) == -1) {
       ESP_LOGE(TAG, "Couldn't parse socketcand frame from client.");
-      delete_serve_client_task(client_i);
+      delete_serve_client_task(client_handler_data);
       return;
     }
 
     // Send the message to other TCP socketcand clients.
-    enqueue_can_message(&received_msg, client_i);
+    enqueue_can_message(&received_msg, client_handler_data);
 
     // Send the frame over CAN
     twai_message_t twai_message = {0};
@@ -267,20 +372,33 @@ static void socketcand_to_bus_task(void *pvParameters) {
                esp_err_to_name(can_res));
     }
   }
-  delete_serve_client_task(client_i);
+  delete_serve_client_task(client_handler_data);
   return;
 }
 
 static void bus_to_socketcand_task(void *pvParameters) {
-  int client_i = (int)pvParameters;
+  client_handler_data_t *client_handler_data =
+      (client_handler_data_t *)pvParameters;
 
-  char buf[SOCKETCAND_BUF_LEN];
+  char buf[SOCKETCAND_RAW_MAX_LEN];
 
   while (true) {
     // read a frame from the CAN bus queue
-    socketcand_translate_frame frame;
-    assert(xQueueReceive(can_bus_queues[client_i], &frame, portMAX_DELAY) ==
-           pdTRUE);
+    socketcand_translate_frame_t frame;
+    BaseType_t res =
+        xQueueReceive(client_handler_data->can_rx_queue, &frame, portMAX_DELAY);
+    if (res != pdTRUE) {
+      // Should be unreachable
+      ESP_LOGE(TAG, "Couldn't receive CAN bus frame from queue. Panicking.");
+      abort();
+    }
+
+    // If received a special frame that means we should
+    // disconnect from the client.
+    if (frame.user_data == SOCKETCAND_INTERRUPT_FRAME) {
+      delete_serve_client_task(client_handler_data);
+      return;
+    }
 
     int64_t micros = esp_timer_get_time();
     int64_t secs = micros / 1000000;
@@ -288,25 +406,20 @@ static void bus_to_socketcand_task(void *pvParameters) {
 
     // write the message to TCP
     if (socketcand_translate_frame_to_string(buf, sizeof(buf), &frame, secs,
-                                             usecs) == -1) {
-      ESP_LOGE(
-          TAG,
-          "Couldn't translate CAN frame to socketcand < > string. Errno %d",
-          errno);
-      delete_serve_client_task(client_i);
+                                             usecs) != ESP_OK) {
+      ESP_LOGE(TAG, "Couldn't translate CAN frame to socketcand < > string.");
+      delete_serve_client_task(client_handler_data);
       return;
     }
-    if (frame_io_write_str(task_frame_messengers[client_i].socket_fd, buf) ==
-        -1) {
-      ESP_LOGD(TAG,
-               "Error sending socketcand frame to client over TCP. Errno: %d",
-               errno);
-      delete_serve_client_task(client_i);
+    if (frame_io_write_str(client_handler_data->tcp_messenger.socket_fd, buf) !=
+        ESP_OK) {
+      ESP_LOGD(TAG, "Error sending socketcand frame to client over TCP.");
+      delete_serve_client_task(client_handler_data);
       return;
     }
   }
 
-  delete_serve_client_task(client_i);
+  delete_serve_client_task(client_handler_data);
   return;
 }
 
@@ -321,23 +434,26 @@ static void can_listener_task(void *pvParameters) {
     }
 
     // put the message in a socketcand struct
-    socketcand_translate_frame frame = {0};
+    socketcand_translate_frame_t frame = {0};
     memcpy(frame.data, received_msg.data, received_msg.data_length_code);
     frame.ext = received_msg.extd;
     frame.id = received_msg.identifier;
     frame.len = received_msg.data_length_code;
+    frame.user_data = SOCKETCAND_NORMAL_FRAME;
 
-    enqueue_can_message(&frame, -1);
+    enqueue_can_message(&frame, NULL);
   }
 }
 
-static void enqueue_can_message(socketcand_translate_frame *message,
-                                int skip_client_i) {
+static void enqueue_can_message(socketcand_translate_frame_t *message,
+                                const client_handler_data_t *skip_client_i) {
   // send the message to all the tasks currently serving clients
   for (int i = 0; i < MAX_CLIENTS; i++) {
-    if (i != skip_client_i && task_frame_messengers[i].socket_fd != -1) {
+    if (&client_handler_datas[i] != skip_client_i &&
+        client_handler_datas[i].tcp_messenger.socket_fd != -1) {
       // append the message to the queue
-      if (xQueueSend(can_bus_queues[i], message, 0) != pdTRUE) {
+      if (xQueueSend(client_handler_datas[i].can_rx_queue, message, 0) !=
+          pdTRUE) {
         ESP_LOGE(TAG, "CAN bus task receive queue %d full. Dropping message.",
                  i);
       }
@@ -345,12 +461,41 @@ static void enqueue_can_message(socketcand_translate_frame *message,
   }
 }
 
-static void delete_serve_client_task(int client_i) {
-  if (task_frame_messengers[client_i].socket_fd != -1) {
-    shutdown(task_frame_messengers[client_i].socket_fd, 0);
-    close(task_frame_messengers[client_i].socket_fd);
-    task_frame_messengers[client_i].socket_fd = -1;
+static void delete_serve_client_task(
+    client_handler_data_t *client_handler_data) {
+  xSemaphoreTake(client_handler_data->handler_task_delete_mutex, portMAX_DELAY);
+
+  // If socket_fd hasn't already been set to -1, that means
+  // I'm the first task to notice the client disconnected.
+  if (client_handler_data->tcp_messenger.socket_fd != -1) {
+    // Gracefully shutdown the socket that the client is connected to.
+    shutdown(client_handler_data->tcp_messenger.socket_fd, 0);
+    close(client_handler_data->tcp_messenger.socket_fd);
+    client_handler_data->tcp_messenger.socket_fd = -1;
+
+    // Send an interrupt frame to `can_rx_queue` so if the other task
+    // is blocking on receiving `can_rx_queue`, it knows to stop.
+    socketcand_translate_frame_t termination_frame;
+    termination_frame.user_data = SOCKETCAND_INTERRUPT_FRAME;
+    xQueueSend(client_handler_data->can_rx_queue, &termination_frame, 0);
+
+  } else {
+    // Else, the other task has already disconnected the client.
+    // Now I'll just return the `client_handler_data` back to the
+    // `unused_client_handler_data_queue`.
+    BaseType_t res =
+        xQueueSend(unused_client_handler_data_queue, &client_handler_data, 0);
+    if (res != pdTRUE) {
+      ESP_LOGE(
+          TAG,
+          "Unreachable. Couldn't return client_handler_data to unused queue.");
+      abort();
+    }
+    ESP_LOGI(TAG, "Socketcand client disconnected.");
   }
+
+  xSemaphoreGive(client_handler_data->handler_task_delete_mutex);
+
   vTaskDelete(NULL);
   return;
 }

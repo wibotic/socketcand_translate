@@ -47,20 +47,28 @@ typedef struct {
 // Default `persistent_settings_t`.
 extern const persistent_settings_t persistent_settings_default;
 
-// Initializes NVS flash memory. Must be called
-// before saving and loading settings.
-esp_err_t persistent_settings_init(void);
+// Pointer to the current persistent settings.
+// Starts out NULL. Read current persistent settings using
+// `persistent_settings_load()`.
+extern const persistent_settings_t* persistent_settings;
+
+// Pointer to the current persistent settings in JSON form.
+// Starts out NULL. Read current persistent settings using
+// `persistent_settings_load()`.
+extern const char* persistent_settings_json;
+
+// Initializes NVS flash memory and reads the stored persistent settings.
+// Fills out `persistent_settings` and `persistent_settings_json`
+// with the loaded value.
+// Initializes them to the default if no saved settings were found.
+// Must not be called more than once.
+esp_err_t persistent_settings_load(void);
 
 // Saves the given settings to NVS flash memory.
 // On success, immediately restarts the ESP32 and doesn't return.
 // On failure, returns an error code.
 // NVS flash must be initialized before calling this.
 esp_err_t persistent_settings_save(const persistent_settings_t* settings);
-
-// Loads the settings saved in NVS flash memory.
-// If config wasn't saved, returns the default config.
-// NVS flash must be initialized before calling this.
-esp_err_t persistent_settings_load(persistent_settings_t* settings_out);
 
 // Sets `timing_config_out` to a config that
 // corresponds to `can_bitrate`.
@@ -73,12 +81,5 @@ esp_err_t persistent_settings_get_timing_config(
 // Sets up button 1 (GPIO 34) on the ESP-EVB to
 // reset the persistent settings to default
 // when held for 1 second.
-// May only be called at most one time.
+// Must only be called at most one time.
 esp_err_t persistent_settings_setup_reset_button(void);
-
-// Print `settings` as a JSON null-terminated C-string to `buf_out`.
-// `buflen` is the length of `buf_out`.
-// Returns the number of characters written.
-// Returns -1 if `buflen` was too small to fit the string.
-esp_err_t persistent_settings_to_json(const persistent_settings_t* settings,
-                                      char* buf_out, size_t buflen);

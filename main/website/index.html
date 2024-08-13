@@ -19,6 +19,10 @@
             margin: auto;
             background-color: #ffe8ff;
         }
+
+        .status_message {
+            background: #fff8ba;
+        }
     </style>
 </head>
 
@@ -28,25 +32,48 @@
             This site requires JavaScript. Please enable it.
         </strong>
     </noscript>
+
     <h1>Socketcand Adapter</h1>
-    <p>This webpage is served by an ESP32-EVB Socketcand Adapter.</p>
-    <p>This adapter serves a minimal subset of
-        <a href='https://github.com/linux-can/socketcand/blob/master/doc/protocol.md'>Socketcand rawmode</a>.
+    <p>
+        This webpage is served by an
+        <a href="https://github.com/wibotic/socketcand_translate">ESP32-EVB Socketcand Adapter</a>.
+    </p>
+    <p>
+        This adapter serves a minimal subset of
+        <a href='https://github.com/linux-can/socketcand/blob/master/doc/protocol.md'>Socketcand rawmode</a>
         on port 9999.
     </p>
 
-    <h2>Status</h2>
-    <div x-data="{status: 'loading...', status_message: ''}" x-init="
+    <h2>Network Status</h2>
+    <div x-data="{status: null, status_message: 'loading...'}" x-init="
         console.log('initializing.');
         try {
-            status = await (await fetch('/status')).json();
+            status = await (await fetch('/api/status')).json();
             status_message = '';
         } catch (error) {
             status_message = `ERROR: Couldn't fetch status from server: ${error}`;
         }
         ">
-        <pre x-text="JSON.stringify(status, null, 2)"></pre>
-        <p style="background:#fff8ba;" x-text='status_message'></p>
+        <ul>
+            <template x-if="status">
+                <template x-for="key of Object.keys(status)">
+                    <li>
+                        <span x-text="`${key}: `"></span>
+                        <template x-if="!status[key] || typeof status[key] !== 'object'">
+                            <span x-text="`${status[key]}`"></span>
+                        </template>
+                        <template x-if="status[key] && typeof status[key] === 'object'">
+                            <ul>
+                                <template x-for="key2 of Object.keys(status[key])">
+                                    <li x-text="`${key2}: ${status[key][key2]}`"></li>
+                                </template>
+                            </ul>
+                        </template>
+                    </li>
+                </template>
+            </template>
+        </ul>
+        <p class="status_message" x-text='status_message'></p>
     </div>
 
 
@@ -77,7 +104,7 @@
     }' x-init="
         console.log('initializing.');
         try {
-            original_conf = await (await fetch('/config')).json();
+            original_conf = await (await fetch('/api/config')).json();
             Object.assign(conf, original_conf);
             status_message = '';
         } catch (error) {
@@ -85,18 +112,16 @@
         }
     " x-on:submit.prevent="
         const post_obj = {};
-        let updated = false;
         for (const key of Object.keys(conf)) {
             const original_val = original_conf[key];
             const val = conf[key];
             if (val && val !== original_val) {
                 post_obj[key] = val;
-                updated = true;
             }
         }
-        if (updated === true) {
+        if (Object.keys(post_obj).length !== 0) {
             try {
-                const response = await fetch('/config', {
+                const response = await fetch('/api/config', {
                     method: 'POST',
                     body: new URLSearchParams(post_obj)
                 });
@@ -194,7 +219,7 @@
 
         <input type='submit' value='Submit'>
 
-        <p style="background:#fff8ba;" x-text='status_message'></p>
+        <p class="status_message" x-text='status_message'></p>
 
     </form>
 

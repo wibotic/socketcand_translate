@@ -1,13 +1,13 @@
+#include "driver_setup.h"
+
 #include "driver/gpio.h"
 #include "driver/twai.h"
+#include "esp_check.h"
 #include "esp_eth.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
-#include "esp_check.h"
 #include "memory.h"
-
-#include "driver_setup.h"
 
 esp_netif_t *driver_setup_eth_netif = NULL;
 esp_netif_t *driver_setup_wifi_netif = NULL;
@@ -15,6 +15,7 @@ esp_netif_t *driver_setup_wifi_netif = NULL;
 // Semaphore that gets set by an event handler
 // when the internet driver is fully running
 static SemaphoreHandle_t internet_ready = NULL;
+static StaticSemaphore_t internet_ready_mem;
 
 // Name that will be used for logging
 static const char *TAG = "driver_setup";
@@ -102,31 +103,31 @@ esp_err_t driver_setup_ethernet(const esp_netif_ip_info_t *ip_info) {
     ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set ethernet IP info.");
   }
 
+  internet_ready = xSemaphoreCreateBinaryStatic(&internet_ready_mem);
+
   // Register event handlers for debugging purposes
   err = esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID,
-                                             &ethernet_event_handler, NULL);
+                                   &ethernet_event_handler, NULL);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register ethernet event handler.");
-  
+
   err = esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP,
-                                             &ip_event_handler, NULL);
+                                   &ip_event_handler, NULL);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register IP event handler.");
 
   //// Attach the ethernet object to ESP netif ////
   esp_eth_netif_glue_handle_t eth_netif_glue =
       esp_eth_new_netif_glue(eth_handle);
-  
+
   err = esp_netif_attach(esp_netif, eth_netif_glue);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't attach ethernet to ESP netif.");
 
   //// Start ethernet ////
-  internet_ready = xSemaphoreCreateBinary();
   err = esp_eth_start(eth_handle);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't start ethernet.");
 
   /// Wait for internet to actually work ////
   if (xSemaphoreTake(internet_ready, pdMS_TO_TICKS(10000)) == pdFALSE) {
-    ESP_LOGE(TAG,
-             "Couldn't start ethernet driver in 10 seconds.");
+    ESP_LOGE(TAG, "Couldn't start ethernet driver in 10 seconds.");
     return ESP_FAIL;
   }
   vSemaphoreDelete(internet_ready);
@@ -135,8 +136,8 @@ esp_err_t driver_setup_ethernet(const esp_netif_ip_info_t *ip_info) {
   return ESP_OK;
 }
 
-esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info, const char ssid[32],
-                       const char password[64]) {
+esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info,
+                            const char ssid[32], const char password[64]) {
   esp_err_t err;
   // Check if the ethernet driver has already been started
   if (driver_setup_wifi_netif != NULL) {
@@ -146,7 +147,7 @@ esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info, const char ssid[
 
   //// Create netif object ////
   esp_netif_t *esp_netif = esp_netif_create_default_wifi_sta();
-    if (esp_netif == NULL) {
+  if (esp_netif == NULL) {
     ESP_LOGE(TAG, "Couldn't create WIFI ESP-NETIF object. Aborting.");
     return ESP_FAIL;
   }
@@ -154,7 +155,8 @@ esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info, const char ssid[
   //// Set static IP info if needed ////
   if (ip_info != NULL) {
     err = esp_netif_dhcpc_stop(esp_netif);
-    ESP_RETURN_ON_ERROR(err, TAG, "Couldn't stop WIFI dhcp to set up static IP.");
+    ESP_RETURN_ON_ERROR(err, TAG,
+                        "Couldn't stop WIFI dhcp to set up static IP.");
     err = esp_netif_set_ip_info(esp_netif, ip_info);
     ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set IP info for WIFI.");
   }
@@ -175,16 +177,17 @@ esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info, const char ssid[
   err = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't configure WIFI.");
 
+  internet_ready = xSemaphoreCreateBinaryStatic(&internet_ready_mem);
+
   // Register event handlers for debugging purposes
   err = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
-                                             &wifi_event_handler, NULL);
+                                   &wifi_event_handler, NULL);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register WIFI handler.");
   err = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-                                             &ip_event_handler, NULL);
+                                   &ip_event_handler, NULL);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register IP handler.");
 
   // Connect to wifi
-  internet_ready = xSemaphoreCreateBinary();
   err = esp_wifi_start();
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't start WIFI.");
   err = esp_wifi_connect();
@@ -192,8 +195,7 @@ esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info, const char ssid[
 
   //// Wait for internet to actually work ////
   if (xSemaphoreTake(internet_ready, pdMS_TO_TICKS(10000)) == pdFALSE) {
-    ESP_LOGE(TAG,
-             "Couldn't start WIFI driver in 10 seconds.");
+    ESP_LOGE(TAG, "Couldn't start WIFI driver in 10 seconds.");
     return ESP_FAIL;
   }
   vSemaphoreDelete(internet_ready);
@@ -225,9 +227,9 @@ esp_err_t driver_setup_can(const twai_timing_config_t *timing_config) {
   // Spawn a task that will put CAN in recovery mode
   // whenever it enters BUS_OFF state.
   xTaskCreateStatic(can_recovery_task, "can_recovery",
-                    sizeof(can_recovery_task_stack), NULL, 0,
+                    sizeof(can_recovery_task_stack), NULL, 15,
                     can_recovery_task_stack, &can_recovery_task_mem);
-  
+
   return ESP_OK;
 }
 
@@ -282,12 +284,12 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base,
   const esp_netif_ip_info_t *ip_info = &event->ip_info;
   ESP_LOGI(TAG, "----- Got IP Address -----");
 
-  const char* hostname;
-  esp_err_t err = esp_netif_get_hostname(event->esp_netif, &hostname);
+  char hostname[8];
+  esp_err_t err = esp_netif_get_netif_impl_name(event->esp_netif, hostname);
   if (err == ESP_OK) {
-    ESP_LOGI(TAG, "Hostname: %s", hostname);
+    ESP_LOGI(TAG, "Name: %s", hostname);
   } else {
-    ESP_LOGE(TAG, "Couldn't get ESP hostname: %s", esp_err_to_name(err));
+    ESP_LOGE(TAG, "Couldn't get ESP impl name: %s", esp_err_to_name(err));
   }
 
   ESP_LOGI(TAG, "IP:       " IPSTR, IP2STR(&ip_info->ip));
@@ -316,60 +318,80 @@ static void can_recovery_task(void *pvParameters) {
       if (err == ESP_OK) {
         ESP_LOGE(TAG, "Initiated CAN recovery.");
       } else {
-        ESP_LOGE(TAG, "Couldn't initiate CAN recovery: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Couldn't initiate CAN recovery: %s",
+                 esp_err_to_name(err));
       }
     }
   }
 }
 
-int driver_setup_get_status_json(char *buf_out, size_t buflen) {
+static char status_json[1024];
+static SemaphoreHandle_t status_json_mutex = NULL;
+static StaticSemaphore_t status_json_mutex_mem;
+
+const char *driver_setup_get_status_json(void) {
+  if (status_json_mutex == NULL) {
+    status_json_mutex = xSemaphoreCreateMutexStatic(&status_json_mutex_mem);
+  }
+  xSemaphoreTake(status_json_mutex, portMAX_DELAY);
+
   int res;
   int written = 0;
 
-  res = snprintf(buf_out + written, buflen - written,
+  res = snprintf(status_json + written, sizeof(status_json) - written,
                  "{\n"
                  "\"ethernet\": ");
   written += res;
-  if (res < 0 || written >= buflen) {
+  if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
-    return -1;  // buf is too small
+    return NULL;
   }
 
-  res = print_netif_status(driver_setup_eth_netif, buf_out + written,
-                           buflen - written);
+  res = print_netif_status(driver_setup_eth_netif, status_json + written,
+                           sizeof(status_json) - written);
   written += res;
-  if (res < 0 || written >= buflen) {
+  if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
-    return -1;  // buf is too small
+    return NULL;
   }
 
-  res = snprintf(buf_out + written, buflen - written,
+  res = snprintf(status_json + written, sizeof(status_json) - written,
                  ",\n"
                  "\"wifi\": ");
   written += res;
-  if (res < 0 || written >= buflen) {
+  if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
-    return -1;  // buf is too small
+    return NULL;
   }
 
-  res = print_netif_status(driver_setup_wifi_netif, buf_out + written,
-                           buflen - written);
+  res = print_netif_status(driver_setup_wifi_netif, status_json + written,
+                           sizeof(status_json) - written);
   written += res;
-  if (res < 0 || written >= buflen) {
+  if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
-    return -1;  // buf is too small
+    return NULL;
   }
 
-  res = snprintf(buf_out + written, buflen - written,
+  res = snprintf(status_json + written, sizeof(status_json) - written,
                  "\n"
                  "}\n");
   written += res;
-  if (res < 0 || written >= buflen) {
+
+  if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
-    return -1;  // buf is too small
+    return NULL;
   }
 
-  return written;
+  return status_json;
+}
+
+esp_err_t driver_setup_release_json_status() {
+  if (xSemaphoreGive(status_json_mutex) != pdTRUE) {
+    ESP_LOGE(TAG, "Error realising driver setup JSON status mutex.");
+    return ESP_FAIL;
+  } else {
+    return ESP_OK;
+  }
 }
 
 static int print_netif_status(esp_netif_t *netif, char *buf_out,
