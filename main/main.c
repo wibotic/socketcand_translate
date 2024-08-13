@@ -25,7 +25,8 @@ void app_main(void) {
   ESP_ERROR_CHECK(persistent_settings_setup_reset_button());
 
   // Print the settings over uart
-  ESP_LOGI(TAG, "Current settings:\n%s\n", persistent_settings_json);
+  ESP_LOGI(TAG, "Current settings:\n");
+  ESP_LOG_BUFFER_CHAR(TAG, persistent_settings_json, strlen(persistent_settings_json));
 
   // Start the CAN bus driver.
   twai_timing_config_t timing_config;
@@ -91,12 +92,11 @@ void app_main(void) {
   while (true) {
     vTaskDelay(pdMS_TO_TICKS(5000));
     size_t min_free = heap_caps_get_minimum_free_size(MALLOC_CAP_DEFAULT);
-    size_t largest_free_block =
+    size_t largest =
   heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
 
-    ESP_LOGI(TAG, "The minimum number of bytes of free heap so far: %d",
-  min_free); ESP_LOGI(TAG, "Size of the largest current free block in bytes:
-  %d", largest_free_block);
+    ESP_LOGI(TAG, "Lowest number of free heap bytes: %d", min_free);
+    ESP_LOGI(TAG, "Largest current free block: %d", largest);
   }
   */
 }
