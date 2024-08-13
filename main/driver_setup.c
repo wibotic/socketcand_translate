@@ -141,14 +141,14 @@ esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info,
   esp_err_t err;
   // Check if the ethernet driver has already been started
   if (driver_setup_wifi_netif != NULL) {
-    ESP_LOGE(TAG, "Can only call driver_setup_wifi() one time. Aborting.");
+    ESP_LOGE(TAG, "Can only call driver_setup_wifi() one time.");
     return ESP_FAIL;
   }
 
   //// Create netif object ////
   esp_netif_t *esp_netif = esp_netif_create_default_wifi_sta();
   if (esp_netif == NULL) {
-    ESP_LOGE(TAG, "Couldn't create WIFI ESP-NETIF object. Aborting.");
+    ESP_LOGE(TAG, "Couldn't create WIFI ESP-NETIF object.");
     return ESP_FAIL;
   }
 
