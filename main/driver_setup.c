@@ -170,7 +170,7 @@ esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info,
   wifi_config_t wifi_config = {0};
   memcpy(wifi_config.sta.ssid, ssid, 32);
   memcpy(wifi_config.sta.password, password, 64);
-  wifi_config.sta.failure_retry_cnt = 2;
+  wifi_config.sta.failure_retry_cnt = 3;
 
   err = esp_wifi_set_mode(WIFI_MODE_STA);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set WIFI to station mode.");
@@ -187,7 +187,10 @@ esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info,
                                    &ip_event_handler, NULL);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register IP handler.");
 
-  // Connect to wifi
+  // Tell the driver to try connecting to WIFI.
+  // Note: This will NOT return an error if WIFI can't connect.
+  // All reconnection logic is instead handled by
+  // `wifi_event_handler()`.
   err = esp_wifi_start();
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't start WIFI.");
   err = esp_wifi_connect();
@@ -271,7 +274,10 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
       ESP_LOGD(TAG, "WIFI station connected.");
       break;
     case WIFI_EVENT_STA_DISCONNECTED:
-      ESP_LOGE(TAG, "WIFI station disconnected.");
+      ESP_LOGE(TAG, "WIFI station disconnected. Trying to reconnect.");
+      esp_wifi_connect();
+      // wait 10 seconds to avoid busy-looping
+      vTaskDelay(pdMS_TO_TICKS(10000));
       break;
     default:
       break;
