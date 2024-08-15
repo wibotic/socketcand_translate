@@ -29,7 +29,8 @@ jobs:
         command: |
           idf.py build &&
           cd build &&
-          esptool.py --chip esp32 merge_bin -o ../merged/esp32_socketcand_adapter.bin @flash_args &&
+          mkdir merged &&
+          esptool.py --chip esp32 merge_bin -o merged/esp32_socketcand_adapter.bin @flash_args &&
           cd ../
     
     # If a tag was pushed, publish a release
@@ -38,5 +39,5 @@ jobs:
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: merged/esp32_socketcand_adapter.bin
+        files: build/merged/esp32_socketcand_adapter.bin
 

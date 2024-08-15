@@ -53,8 +53,8 @@ The default settings are:
         - Address: 192.168.2.163
         - Netmask: 255.255.255.0
         - Gateway: 192.168.2.1
-    - Wifi is disabled.
-    - CAN bitrate is 500 kbits.
+    - Wi-Fi is disabled.
+    - CAN bitrate is 500 kbit/s.
 
 2. Use an ethernet cable to connect the ESP32 to your computer or a local network.
 
@@ -85,5 +85,5 @@ yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.16
 yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',29536),99)" call 18 uavcan.node.GetInfo.1.0 '{}'
 
 # Get the name of node 18 on the CAN bus using:
-yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',9999),99)" call 18 uavcan.register.Access.1.0 "{'name':{'name':'NAME'}}"
+yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',29536),99)" call 18 uavcan.register.Access.1.0 "{'name':{'name':'NAME'}}"
 ```
