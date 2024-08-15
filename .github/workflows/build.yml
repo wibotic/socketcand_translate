@@ -31,7 +31,7 @@ jobs:
     # Merge the built binaries
     # into a single file
     - name: merge-binaries
-      - run: |
+      run: |
         cd build
         esptool.py --chip esp32 merge_bin -o ../merged/esp32_socketcand_adapter.bin @flash_args
         cd ../
