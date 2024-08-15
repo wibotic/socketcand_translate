@@ -26,7 +26,7 @@ void app_main(void) {
 
   // Print the settings over uart
   ESP_LOGI(TAG, "Current settings:\n");
-  ESP_LOG_BUFFER_CHAR(TAG, persistent_settings_json, strlen(persistent_settings_json));
+  esp_log_write(ESP_LOG_INFO, TAG, persistent_settings_json);
 
   // Start the CAN bus driver.
   twai_timing_config_t timing_config;
@@ -79,7 +79,7 @@ void app_main(void) {
   ESP_ERROR_CHECK(start_http_server());
 
   // Start the socketcand translation server
-  ESP_ERROR_CHECK(socketcand_server_start(9999));
+  ESP_ERROR_CHECK(socketcand_server_start(29536));
 
   // start the UDP beacon
   if (discovery_beacon_start() == -1) {

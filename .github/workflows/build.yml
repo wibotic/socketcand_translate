@@ -28,14 +28,19 @@ jobs:
         path: '/'
         command: 'idf.py build'
     
+    # Merge the built binaries
+    # into a single file
+    - name: merge-binaries
+      - run: |
+        cd build
+        esptool.py --chip esp32 merge_bin -o ../merged/esp32_socketcand_adapter.bin @flash_args
+        cd ../
+    
     # If a tag was pushed, publish a release
     # with the binaries produced by the previous step.
     - name: Release
       uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: |
-          build/bootloader/bootloader.bin
-          build/partition_table/partition-table.bin
-          build/esp32_socketcand_adapter.bin
+        files: merged/esp32_socketcand_adapter.bin
 

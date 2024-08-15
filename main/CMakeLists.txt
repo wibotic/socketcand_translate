@@ -9,6 +9,9 @@ idf_component_register(
         "persistent_settings.c"
         "discovery_beacon.c"
         INCLUDE_DIRS "."
-        EMBED_FILES website/index.html
-        EMBED_FILES website/alpine.js
+        EMBED_FILES
+        website/index.html
+        website/favicon.svg
+        website/script.js
+        website/alpine.js
 )

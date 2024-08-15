@@ -134,7 +134,7 @@ esp_err_t persistent_settings_load() {
       "\"can_bitrate\": "
       "%d\n"
 
-      "}",
+      "}\n",
       persistent_settings->eth_use_static ? "true" : "false",
       IP2STR(&persistent_settings->eth_ip_info.ip),
       IP2STR(&persistent_settings->eth_ip_info.netmask),

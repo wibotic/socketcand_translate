@@ -16,23 +16,21 @@ Physical CAN bus (can0) <----> |---------------------------|
 ```
 
 ## Pre-built binaries
-The *Releases* page contains pre-built `*.bin` files.
+The *Releases* page contains pre-built `esp32_socketcand_adapter.bin` files.
 To flash them onto your ESP32 using
 [Esptool](https://docs.espressif.com/projects/esptool/en/latest/esp32/), run this command:
 
 ```bash
-python -m esptool \
---chip esp32 \
--b 460800 \
---before default_reset \
---after hard_reset write_flash \
---flash_mode dio \
---flash_size 2MB \
---flash_freq 40m \
-0x1000 build/bootloader/bootloader.bin \
-0x8000 build/partition_table/partition-table.bin \
-0x10000 build/esp32_socketcand_adapter.bin
+esptool.py write_flash 0 esp32_socketcand_adapter.bin
 ```
+
+To monitor log output from the ESP32, run:
+
+```bash
+idf.py monitor
+```
+
+Note: Flashing will fail if the port is being monitored.
 
 ## Compilation
 Alternatively, you can build the project yourself.
@@ -41,7 +39,9 @@ Alternatively, you can build the project yourself.
 
 2. Download this repository.
 
-3. In the downloaded repository, run `idf.py flash` to flash your ESP32.
+3. Run `idf.py build` to build the project.
+
+3. Run `idf.py flash` to flash your ESP32.
 
 
 ## Usage
@@ -67,7 +67,7 @@ Change network settings to your liking.
 
 5. Use a tool such as [socketcand](https://github.com/linux-can/socketcand)
 to connect to your ESP32's IP address.
-The ESP32 serves socketcand over port 9999.
+The ESP32 serves socketcand over port 29536.
 
 6. You should be able to send and receive messages to the CAN bus
 connected to the ESP32.
@@ -79,23 +79,11 @@ Here are some examples:
 
 ```bash
 # Monitor the CAN bus using:
-yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',9999),99)" monitor
+yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',29536),99)" monitor
 
 # Get the info of node 18 on the CAN bus using:
-yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',9999),99)" call 18 uavcan.node.GetInfo.1.0 '{}'
+yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',29536),99)" call 18 uavcan.node.GetInfo.1.0 '{}'
 
-# -- Other example commands below --
-# (these haven't been tested)
-
-yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',9999),99)" call 18 uavcan.register.Access.1.0 "{'name':{'name':'VREC'}}"
-
-yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',9999),99)" call 18 uavcan.register.Access.1.0 "{'name':{'name':'NAME'},'value':{'unstructured':{'value':'cantest'}}}"
-
+# Get the name of node 18 on the CAN bus using:
 yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',9999),99)" call 18 uavcan.register.Access.1.0 "{'name':{'name':'NAME'}}"
-
-yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',9999),99)" call 18 uavcan.register.Access.1.0 "{'name':{'name':'BRPC'},'value':{'natural32':{'value':1374}}}"
-
-yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',9999),99)" call 18 uavcan.register.Access.1.0 "{'name':{'name':'ACCS'},'value':{'natural32':{'value':15}}}" # Access level to 15
-
-yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',9999),99)" call 18 uavcan.register.Access.1.0 "{'name':{'name':'AVR'},'value':{'natural32':{'value':5}}}" # ADCViewRate to 5ms
 ```

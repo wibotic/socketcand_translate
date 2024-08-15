@@ -8,50 +8,83 @@
 // Name that will be used for logging
 #define TAG "http_server"
 
+// GET /
 extern const uint8_t index_html[] asm("_binary_index_html_start");
 extern const uint8_t index_html_end[] asm("_binary_index_html_end");
-extern const uint8_t alpine_js[] asm("_binary_alpine_js_start");
-extern const uint8_t alpine_js_end[] asm("_binary_alpine_js_end");
-
-// Handles GET /
-static esp_err_t serve_get(httpd_req_t *req);
-
+static esp_err_t serve_get(httpd_req_t *req) {
+  return httpd_resp_send(req, (char *)index_html, index_html_end - index_html);
+}
 static const httpd_uri_t get_handler = {
     .uri = "/", .handler = serve_get, .method = HTTP_GET, .user_ctx = NULL};
 
-// Handles GET /alpine.js
-static esp_err_t serve_get_alpine_js(httpd_req_t *req);
+// GET /favicon.svg
+extern const uint8_t favicon_svg[] asm("_binary_favicon_svg_start");
+extern const uint8_t favicon_svg_end[] asm("_binary_favicon_svg_end");
+static esp_err_t serve_get_favicon_svg(httpd_req_t *req) {
+  esp_err_t err = httpd_resp_set_type(req, "image/svg+xml");
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set response type.");
+  return httpd_resp_send(req, (char *)favicon_svg,
+                         favicon_svg_end - favicon_svg);
+}
+static const httpd_uri_t get_favicon_svg_handler = {
+    .uri = "/favicon.svg",
+    .handler = serve_get_favicon_svg,
+    .method = HTTP_GET,
+    .user_ctx = NULL};
 
+// GET /script.js
+extern const uint8_t script_js[] asm("_binary_script_js_start");
+extern const uint8_t script_js_end[] asm("_binary_script_js_end");
+static esp_err_t serve_get_script_js(httpd_req_t *req) {
+  esp_err_t err = httpd_resp_set_type(req, "text/javascript");
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set response type.");
+  return httpd_resp_send(req, (char *)script_js, script_js_end - script_js);
+}
+static const httpd_uri_t get_script_js_handler = {
+    .uri = "/script.js",
+    .handler = serve_get_script_js,
+    .method = HTTP_GET,
+    .user_ctx = NULL};
+
+// GET /alpine.js
+extern const uint8_t alpine_js[] asm("_binary_alpine_js_start");
+extern const uint8_t alpine_js_end[] asm("_binary_alpine_js_end");
+static esp_err_t serve_get_alpine_js(httpd_req_t *req) {
+  esp_err_t err = httpd_resp_set_type(req, "text/javascript");
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set response type.");
+  return httpd_resp_send(req, (char *)alpine_js, alpine_js_end - alpine_js);
+}
 static const httpd_uri_t get_alpine_js_handler = {
     .uri = "/alpine.js",
     .handler = serve_get_alpine_js,
     .method = HTTP_GET,
     .user_ctx = NULL};
 
-// Handles GET /api/config
-static esp_err_t serve_get_config_api(httpd_req_t *req);
-
-static const httpd_uri_t get_config_api_handler = {
-    .uri = "/api/config",
-    .handler = serve_get_config_api,
-    .method = HTTP_GET,
-    .user_ctx = NULL};
-
-// Handles GET /api/status
-static esp_err_t handle_get_status_api(httpd_req_t *req);
-
-static const httpd_uri_t get_status_api_handler = {
+// GET /api/status
+static esp_err_t serve_get_api_status(httpd_req_t *req);
+static const httpd_uri_t get_api_status_handler = {
     .uri = "/api/status",
-    .handler = handle_get_status_api,
+    .handler = serve_get_api_status,
     .method = HTTP_GET,
     .user_ctx = NULL};
 
-// Handles POST /api/config
-static esp_err_t handle_post_config_api(httpd_req_t *req);
-
-static const httpd_uri_t post_config_api_handler = {
+// GET /api/config
+static esp_err_t serve_get_api_config(httpd_req_t *req) {
+  esp_err_t err = httpd_resp_set_type(req, "application/json");
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set response type.");
+  return httpd_resp_send(req, persistent_settings_json, HTTPD_RESP_USE_STRLEN);
+}
+static const httpd_uri_t get_api_config_handler = {
     .uri = "/api/config",
-    .handler = handle_post_config_api,
+    .handler = serve_get_api_config,
+    .method = HTTP_GET,
+    .user_ctx = NULL};
+
+// POST /api/config
+static esp_err_t serve_post_api_config(httpd_req_t *req);
+static const httpd_uri_t post_api_config_handler = {
+    .uri = "/api/config",
+    .handler = serve_post_api_config,
     .method = HTTP_POST,
     .user_ctx = NULL};
 
@@ -74,38 +107,28 @@ esp_err_t start_http_server(void) {
   err = httpd_register_uri_handler(server, &get_handler);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register HTTP URI handler.");
 
+  err = httpd_register_uri_handler(server, &get_favicon_svg_handler);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register HTTP URI handler.");
+
+  err = httpd_register_uri_handler(server, &get_script_js_handler);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register HTTP URI handler.");
+
   err = httpd_register_uri_handler(server, &get_alpine_js_handler);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register HTTP URI handler.");
 
-  err = httpd_register_uri_handler(server, &get_config_api_handler);
+  err = httpd_register_uri_handler(server, &get_api_status_handler);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register HTTP URI handler.");
 
-  err = httpd_register_uri_handler(server, &post_config_api_handler);
+  err = httpd_register_uri_handler(server, &get_api_config_handler);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register HTTP URI handler.");
 
-  err = httpd_register_uri_handler(server, &get_status_api_handler);
+  err = httpd_register_uri_handler(server, &post_api_config_handler);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register HTTP URI handler.");
 
   return ESP_OK;
 }
 
-static esp_err_t serve_get(httpd_req_t *req) {
-  return httpd_resp_send(req, (char *)index_html, index_html_end - index_html);
-}
-
-static esp_err_t serve_get_alpine_js(httpd_req_t *req) {
-  esp_err_t err = httpd_resp_set_type(req, "text/javascript");
-  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set response type.");
-  return httpd_resp_send(req, (char *)alpine_js, alpine_js_end - alpine_js);
-}
-
-static esp_err_t serve_get_config_api(httpd_req_t *req) {
-  esp_err_t err = httpd_resp_set_type(req, "application/json");
-  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set response type.");
-  return httpd_resp_send(req, persistent_settings_json, HTTPD_RESP_USE_STRLEN);
-}
-
-static esp_err_t handle_get_status_api(httpd_req_t *req) {
+static esp_err_t serve_get_api_status(httpd_req_t *req) {
   esp_err_t err;
 
   const char *status_json = driver_setup_get_status_json();
@@ -125,12 +148,12 @@ static esp_err_t handle_get_status_api(httpd_req_t *req) {
   return http_err;
 }
 
-// Stores the body of the request in `handle_post_config_api()`.
+// Stores the body of the request in `serve_post_api_config()`.
 static char post_buf[1024];
 SemaphoreHandle_t post_buf_mutex = NULL;
 StaticSemaphore_t post_buf_mutex_mem;
 
-static esp_err_t handle_post_config_api(httpd_req_t *req) {
+static esp_err_t serve_post_api_config(httpd_req_t *req) {
   // If POST request is too large
   if (req->content_len >= sizeof(post_buf)) {
     httpd_resp_send_err(req, 500, "POST post_buf too long.");
