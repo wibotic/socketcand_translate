@@ -24,10 +24,11 @@ To flash them onto your ESP32 using
 esptool.py write_flash 0 esp32_socketcand_adapter.bin
 ```
 
-To monitor log output from the ESP32, run:
+To monitor log output from the ESP32 on Linux, run: \
+(replace "/dev/ttyUSB0" with the port you're using)
 
 ```bash
-idf.py monitor
+tail -f /dev/ttyUSB0
 ```
 
 Note: Flashing will fail if the port is being monitored.

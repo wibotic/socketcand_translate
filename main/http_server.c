@@ -131,13 +131,15 @@ esp_err_t start_http_server(void) {
 static esp_err_t serve_get_api_status(httpd_req_t *req) {
   esp_err_t err;
 
-  const char *status_json = driver_setup_get_status_json();
-  if (status_json == NULL) {
-    ESP_LOGE(TAG, "Couldn't get current driver status.");
+  const char *status_json;
+
+  err = driver_setup_get_status_json(&status_json);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Couldn't get current driver status: %s", esp_err_to_name(err));
     httpd_resp_send_err(req, 500, "Couldn't get current driver status.");
     err = driver_setup_release_json_status();
     ESP_RETURN_ON_ERROR(err, TAG, "Couldn't release JSON status.");
-    return ESP_FAIL;
+    return err;
   }
 
   esp_err_t http_err = httpd_resp_send(req, status_json, HTTPD_RESP_USE_STRLEN);

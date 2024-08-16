@@ -42,8 +42,16 @@ static StackType_t can_recovery_task_stack[4096];
 static StaticTask_t can_recovery_task_mem;
 
 // Prints the status of `netif` to `buf` in JSON format.
-// Returns the number of bytes written, or -1 if ran out of space.
-static int print_netif_status(esp_netif_t *netif, char *buf_out, size_t buflen);
+// Returns an error if `buflen` was too small.
+// Increments `bytes_written` by the number of bytes written.
+static esp_err_t print_netif_status(esp_netif_t *netif, char *buf_out,
+                                    size_t buflen, size_t *bytes_written);
+
+// Prints the status of the CAN bus to `buf` in JSON format.
+// Returns an error if `buflen` was too small.
+// Increments `bytes_written` by the number of bytes written.
+static esp_err_t print_can_status(char *buf_out, size_t buflen,
+                                  size_t *bytes_written);
 
 esp_err_t driver_setup_ethernet(const esp_netif_ip_info_t *ip_info) {
   esp_err_t err;
@@ -331,52 +339,58 @@ static void can_recovery_task(void *pvParameters) {
   }
 }
 
-static char status_json[1024];
+static char status_json[2048];
 static SemaphoreHandle_t status_json_mutex = NULL;
 static StaticSemaphore_t status_json_mutex_mem;
 
-const char *driver_setup_get_status_json(void) {
+esp_err_t driver_setup_get_status_json(const char **json_out) {
   if (status_json_mutex == NULL) {
     status_json_mutex = xSemaphoreCreateMutexStatic(&status_json_mutex_mem);
   }
   xSemaphoreTake(status_json_mutex, portMAX_DELAY);
 
+  esp_err_t err;
   int res;
-  int written = 0;
+  size_t written = 0;
 
   res = snprintf(status_json + written, sizeof(status_json) - written,
                  "{\n"
-                 "\"ethernet\": ");
+                 "\"Ethernet\": ");
   written += res;
   if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
-    return NULL;
+    return ESP_ERR_NO_MEM;
   }
 
-  res = print_netif_status(driver_setup_eth_netif, status_json + written,
-                           sizeof(status_json) - written);
-  written += res;
-  if (res < 0 || written >= sizeof(status_json)) {
-    ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
-    return NULL;
-  }
+  err = print_netif_status(driver_setup_eth_netif, status_json + written,
+                           sizeof(status_json) - written, &written);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't print ethernet status.");
 
   res = snprintf(status_json + written, sizeof(status_json) - written,
                  ",\n"
-                 "\"wifi\": ");
+                 "\"Wi-Fi\": ");
   written += res;
   if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
-    return NULL;
+    return ESP_ERR_NO_MEM;
   }
 
   res = print_netif_status(driver_setup_wifi_netif, status_json + written,
-                           sizeof(status_json) - written);
+                           sizeof(status_json) - written, &written);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't print Wi-Fi netif status.");
+
+  res = snprintf(status_json + written, sizeof(status_json) - written,
+                 ",\n"
+                 "\"CAN Bus\": ");
   written += res;
   if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
-    return NULL;
+    return ESP_ERR_NO_MEM;
   }
+
+  res = print_can_status(status_json + written, sizeof(status_json) - written,
+                         &written);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't print CAN bus status.");
 
   res = snprintf(status_json + written, sizeof(status_json) - written,
                  "\n"
@@ -385,10 +399,11 @@ const char *driver_setup_get_status_json(void) {
 
   if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
-    return NULL;
+    return ESP_ERR_NO_MEM;
   }
 
-  return status_json;
+  *json_out = status_json;
+  return ESP_OK;
 }
 
 esp_err_t driver_setup_release_json_status() {
@@ -400,32 +415,25 @@ esp_err_t driver_setup_release_json_status() {
   }
 }
 
-static int print_netif_status(esp_netif_t *netif, char *buf_out,
-                              size_t buflen) {
-  int written = 0;
+static esp_err_t print_netif_status(esp_netif_t *netif, char *buf_out,
+                                    size_t buflen, size_t *bytes_written) {
+  int written;
   esp_err_t err;
 
-  // null if netif if is null
+  // null if netif is null
   if (netif == NULL) {
-    written = snprintf(buf_out + written, buflen - written, "null\n");
+    written = snprintf(buf_out, buflen, "null");
   } else {
     bool is_up = esp_netif_is_netif_up(netif);
 
     uint8_t mac_address[6];
     err = esp_netif_get_mac(netif, mac_address);
-    if (err != ESP_OK) {
-      ESP_LOGE(TAG, "Couldn't get MAC address: %s", esp_err_to_name(err));
-      return -1;
-    }
+    ESP_RETURN_ON_ERROR(err, TAG, "Couldn't get netif MAC address.");
 
     esp_netif_dhcp_status_t dhcp_status_code;
     err = esp_netif_dhcpc_get_status(netif, &dhcp_status_code);
-    if (err != ESP_OK) {
-      ESP_LOGE(TAG, "Couldn't get DHCP status: %s", esp_err_to_name(err));
-      return -1;
-    }
+    ESP_RETURN_ON_ERROR(err, TAG, "Couldn't get netif DHCP status.");
     char dhcp_status[32];
-
     switch (dhcp_status_code) {
       case ESP_NETIF_DHCP_INIT:
         strcpy(dhcp_status, "not yet started");
@@ -446,38 +454,35 @@ static int print_netif_status(esp_netif_t *netif, char *buf_out,
 
     esp_netif_ip_info_t ip_info;
     err = esp_netif_get_ip_info(netif, &ip_info);
-    if (err != ESP_OK) {
-      ESP_LOGE(TAG, "Couldn't get IP info: %s", esp_err_to_name(err));
-      return -1;
-    }
+    ESP_RETURN_ON_ERROR(err, TAG, "Couldn't get netif IP info.");
 
     const char *description = esp_netif_get_desc(netif);
 
     written =
         snprintf(buf_out, buflen,
                  "{\n"
-                 "\"is_up\": "
+                 "\"Is up?\": "
                  "%s,\n"
 
-                 "\"mac_address\": "
+                 "\"MAC Address\": "
                  "\"%02x:%02x:%02x:%02x:%02x:%02x\",\n"
 
-                 "\"dhcp_status\": "
+                 "\"DHCP Status\": "
                  "\"%s\",\n"
 
-                 "\"ip\": "
+                 "\"IP\": "
                  "\"" IPSTR
                  "\",\n"
 
-                 "\"netmask\": "
+                 "\"Network Mask\": "
                  "\"" IPSTR
                  "\",\n"
 
-                 "\"gw\": "
+                 "\"Gateway\": "
                  "\"" IPSTR
                  "\",\n"
 
-                 "\"type\": "
+                 "\"Type\": "
                  "\"%s\"\n"
 
                  "}",
@@ -489,7 +494,83 @@ static int print_netif_status(esp_netif_t *netif, char *buf_out,
 
   if (written < 0 || written >= buflen) {
     ESP_LOGE(TAG, "print_netif_status buflen too short.");
-    return -1;  // buf is too small
+    return ESP_ERR_NO_MEM;
   }
-  return written;
+
+  *bytes_written += written;
+  return ESP_OK;
+}
+
+static esp_err_t print_can_status(char *buf_out, size_t buflen,
+                                  size_t *bytes_written) {
+  twai_status_info_t can_status;
+  esp_err_t err = twai_get_status_info(&can_status);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't get CAN bus info.");
+
+  char can_state[64];
+  switch (can_status.state) {
+    case TWAI_STATE_STOPPED:
+      strcpy(can_state, "stopped");
+      break;
+    case TWAI_STATE_RUNNING:
+      strcpy(can_state, "running");
+      break;
+    case TWAI_STATE_BUS_OFF:
+      strcpy(can_state, "bus off due to exceeded error count");
+      break;
+    case TWAI_STATE_RECOVERING:
+      strcpy(can_state, "recovering");
+      break;
+    default:
+      strcpy(can_state, "UNDEFINED");
+      break;
+  }
+
+  int written =
+      snprintf(buf_out, buflen,
+               "{\n"
+               "\"State\": "
+               "\"%s\",\n"
+
+               "\"Number of messages queued for transmission\": "
+               "%ld,\n"
+
+               "\"Number of messages waiting in receive queue\": "
+               "%ld,\n"
+
+               "\"Transmit error counter\": "
+               "%ld,\n"
+
+               "\"Receive error counter\": "
+               "%ld,\n"
+
+               "\"Number of failed message transmissions\": "
+               "%ld,\n"
+
+               "\"Number of failed failed message receptions\": "
+               "%ld,\n"
+
+               "\"Number of incoming messages lost due to FIFO overrun\": "
+               "%ld,\n"
+
+               "\"Number of arbitrations that were lost\": "
+               "%ld,\n"
+
+               "\"Number of bus errors detected\": "
+               "%ld\n"
+
+               "}",
+               can_state, can_status.msgs_to_tx, can_status.msgs_to_rx,
+               can_status.tx_error_counter, can_status.rx_error_counter,
+               can_status.tx_failed_count, can_status.rx_missed_count,
+               can_status.rx_overrun_count, can_status.arb_lost_count,
+               can_status.bus_error_count);
+
+  if (written < 0 || written >= buflen) {
+    ESP_LOGE(TAG, "print_netif_status buflen too short.");
+    return ESP_ERR_NO_MEM;
+  }
+
+  *bytes_written += written;
+  return ESP_OK;
 }
