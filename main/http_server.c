@@ -1,9 +1,11 @@
 #include "http_server.h"
 
-#include "driver_setup.h"
 #include "esp_check.h"
 #include "esp_http_server.h"
+
 #include "persistent_settings.h"
+#include "status_report.h"
+#include "driver_setup.h"
 
 // Name that will be used for logging
 #define TAG "http_server"
@@ -133,19 +135,19 @@ static esp_err_t serve_get_api_status(httpd_req_t *req) {
 
   const char *status_json;
 
-  err = driver_setup_get_status_json(&status_json);
+  err = status_report_get(&status_json, driver_setup_eth_netif, driver_setup_wifi_netif);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Couldn't get current driver status: %s",
              esp_err_to_name(err));
     httpd_resp_send_err(req, 500, "Couldn't get current driver status.");
-    err = driver_setup_release_json_status();
+    err = status_report_release();
     ESP_RETURN_ON_ERROR(err, TAG, "Couldn't release JSON status.");
     return err;
   }
 
   esp_err_t http_err = httpd_resp_send(req, status_json, HTTPD_RESP_USE_STRLEN);
 
-  err = driver_setup_release_json_status();
+  err = status_report_release();
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't release JSON status.");
 
   return http_err;

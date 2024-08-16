@@ -9,8 +9,6 @@ static const char *TAG = "socketcand_server";
 // See: https://en.wikipedia.org/wiki/CAN_bus#Frames
 #define CAN_SHORT_ID_MASK 0x000007FFU
 
-// TODO: Figure out how to add some simple unit tests.
-
 esp_err_t socketcand_translate_frame_to_string(
     char *buf, size_t bufsize, const socketcand_translate_frame_t *can_frame,
     uint32_t secs, uint32_t usecs) {

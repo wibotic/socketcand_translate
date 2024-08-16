@@ -1,6 +1,7 @@
 #include "socketcand_server.h"
 
 #include "driver/twai.h"
+#include "esp_intr_alloc.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "frame_io.h"
@@ -121,6 +122,27 @@ static void bus_to_socketcand_task(void *pvParameters);
 static void delete_serve_client_task(
     client_handler_data_t *client_handler_data);
 
+static socketcand_server_status_t server_status = {0};
+static SemaphoreHandle_t server_status_mutex = NULL;
+static StaticSemaphore_t server_status_mutex_mem;
+
+esp_err_t socketcand_server_status(socketcand_server_status_t *status_out) {
+  if (server_status_mutex == NULL) {
+    ESP_LOGE(
+        TAG,
+        "Can't get status because socketcand server hasn't been initialized.");
+    return ESP_FAIL;
+  }
+  if (xSemaphoreTake(server_status_mutex, portMAX_DELAY) != pdTRUE) {
+    ESP_LOGE(TAG, "Unreachable: couldn't acquire server_status_mutex.");
+    return ESP_FAIL;
+  }
+
+  memcpy(status_out, &server_status, sizeof(server_status));
+  xSemaphoreGive(server_status_mutex);
+  return ESP_OK;
+}
+
 esp_err_t socketcand_server_start(uint16_t port) {
   // create a TCP socket
   int listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -162,6 +184,13 @@ esp_err_t socketcand_server_start(uint16_t port) {
   // Log that we've started listening.
   ESP_LOGD(TAG, "Started socketcand TCP server listening on %s:%d",
            inet_ntoa(server_addr.sin_addr), ntohs(server_addr.sin_port));
+
+  // Initialize the mutex for accessing the `server_status` struct.
+  server_status_mutex = xSemaphoreCreateMutexStatic(&server_status_mutex_mem);
+  if (server_status_mutex == NULL) {
+    ESP_LOGE(TAG, "Unreachable. server_status_mutex couldn't be created.");
+    abort();
+  }
 
   // Initialize `client_handler_datas`.
   for (int i = 0; i < MAX_CLIENTS; i++) {
@@ -289,7 +318,7 @@ static void serve_client_task(void *pvParameters) {
   char frame_str[SOCKETCAND_RAW_MAX_LEN] = "";
   while (true) {
     // write a handshake frame
-    int phase = socketcand_translate_open_raw(frame_str, sizeof(frame_str));
+    int32_t phase = socketcand_translate_open_raw(frame_str, sizeof(frame_str));
     frame_io_write_str(client_handler_data->tcp_messenger.socket_fd, frame_str);
 
     if (phase == -1) {
@@ -304,6 +333,11 @@ static void serve_client_task(void *pvParameters) {
                "rawmode. "
                "Closing connection.",
                frame_str);
+      // Increment the server status error counter
+      xSemaphoreTake(server_status_mutex, portMAX_DELAY);
+      server_status.invalid_socketcand_frames_received += 1;
+      xSemaphoreGive(server_status_mutex);
+
       delete_serve_client_task(client_handler_data);
       return;
     } else if (phase == 3) {
@@ -351,9 +385,19 @@ static void socketcand_to_bus_task(void *pvParameters) {
     socketcand_translate_frame_t received_msg;
     if (socketcand_translate_string_to_frame(frame_str, &received_msg) == -1) {
       ESP_LOGE(TAG, "Couldn't parse socketcand frame from client.");
+      // Increment the server status error counter
+      xSemaphoreTake(server_status_mutex, portMAX_DELAY);
+      server_status.invalid_socketcand_frames_received += 1;
+      xSemaphoreGive(server_status_mutex);
+
       delete_serve_client_task(client_handler_data);
       return;
     }
+
+    // Increment the server status can bus counter
+    xSemaphoreTake(server_status_mutex, portMAX_DELAY);
+    server_status.socketcand_frames_received += 1;
+    xSemaphoreGive(server_status_mutex);
 
     // Send the message to other TCP socketcand clients.
     enqueue_can_message(&received_msg, client_handler_data);
@@ -367,7 +411,12 @@ static void socketcand_to_bus_task(void *pvParameters) {
 
     esp_err_t can_res = twai_transmit(&twai_message, 0);
 
-    if (can_res != ESP_OK) {
+    if (can_res == ESP_OK) {
+      // Increment the server status can bus counter
+      xSemaphoreTake(server_status_mutex, portMAX_DELAY);
+      server_status.can_bus_frames_sent += 1;
+      xSemaphoreGive(server_status_mutex);
+    } else {
       ESP_LOGE(TAG, "Couldn't send frame over CAN. %s",
                esp_err_to_name(can_res));
     }
@@ -417,6 +466,11 @@ static void bus_to_socketcand_task(void *pvParameters) {
       delete_serve_client_task(client_handler_data);
       return;
     }
+
+    // Increment the server status socketcand sent counter
+    xSemaphoreTake(server_status_mutex, portMAX_DELAY);
+    server_status.socketcand_frames_sent += 1;
+    xSemaphoreGive(server_status_mutex);
   }
 
   delete_serve_client_task(client_handler_data);
@@ -432,6 +486,11 @@ static void can_listener_task(void *pvParameters) {
       ESP_LOGE(TAG, "Error receiving message from CAN bus: %s",
                esp_err_to_name(res));
     }
+
+    // Increment the server status can bus counter
+    xSemaphoreTake(server_status_mutex, portMAX_DELAY);
+    server_status.can_bus_frames_received += 1;
+    xSemaphoreGive(server_status_mutex);
 
     // put the message in a socketcand struct
     socketcand_translate_frame_t frame = {0};

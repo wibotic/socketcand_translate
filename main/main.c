@@ -4,6 +4,7 @@
 #include "http_server.h"
 #include "persistent_settings.h"
 #include "socketcand_server.h"
+#include "status_report.h"
 
 // Name that will be used for logging
 static const char* TAG = "main";
@@ -88,14 +89,14 @@ void app_main(void) {
   // Log network status:
   vTaskDelay(pdMS_TO_TICKS(10000));
   const char* json_status;
-  err = driver_setup_get_status_json(&json_status);
+  err = status_report_get(&json_status, driver_setup_eth_netif, driver_setup_wifi_netif);
   if (err == ESP_OK) {
     ESP_LOGI(TAG, "Network status after startup:");
     esp_log_write(ESP_LOG_INFO, TAG, json_status);
   } else {
     ESP_LOGE(TAG, "Couldn't get driver status: %s", esp_err_to_name(err));
   }
-  err = driver_setup_release_json_status();
+  err = status_report_release();
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "CRITICAL: Couldn't release JSON status.");
   }

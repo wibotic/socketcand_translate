@@ -8,6 +8,7 @@ idf_component_register(
         "http_server.c"
         "persistent_settings.c"
         "discovery_beacon.c"
+        "status_report.c"
         INCLUDE_DIRS "."
         EMBED_FILES
         website/index.html

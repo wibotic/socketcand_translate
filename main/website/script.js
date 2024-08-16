@@ -4,14 +4,16 @@ const network_status_data = {
     status: null,
     status_message: 'loading...',
 
-    async initialize() {
+    // Start continuously fetching `status` in the background.
+    async fetch_update() {
         try {
             this.status = await (await fetch('/api/status')).json();
             this.status_message = '';
         } catch (error) {
             this.status_message = `ERROR: Couldn't fetch status from server: ${error}`;
         }
-    },
+        setTimeout(() => this.fetch_update(), 2000);
+    }
 };
 
 const network_settings_data = {
@@ -32,7 +34,8 @@ const network_settings_data = {
     original_conf: null,
     status_message: "loading...",
 
-    async initialize() {
+    // Fetch the server's configuration.
+    async fetch_update() {
         try {
             const text = await (await fetch('/api/config')).text();
             this.original_conf = JSON.parse(text);
@@ -43,6 +46,7 @@ const network_settings_data = {
         }
     },
 
+    // Submit the current configuration to the server.
     async submit() {
         if (this.original_conf === null) {
             this.status_message = "ERROR: No settings fetched from server. Try reloading."
@@ -71,6 +75,9 @@ const network_settings_data = {
                     body: new URLSearchParams(post_obj)
                 });
                 this.status_message = await response.text();
+
+                // If the response is OK, the server will restart,
+                // so reload the page
                 if (response.ok) {
                     setTimeout(() => {
                         window.location.reload();
