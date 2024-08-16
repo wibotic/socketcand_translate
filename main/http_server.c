@@ -135,7 +135,8 @@ static esp_err_t serve_get_api_status(httpd_req_t *req) {
 
   err = driver_setup_get_status_json(&status_json);
   if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Couldn't get current driver status: %s", esp_err_to_name(err));
+    ESP_LOGE(TAG, "Couldn't get current driver status: %s",
+             esp_err_to_name(err));
     httpd_resp_send_err(req, 500, "Couldn't get current driver status.");
     err = driver_setup_release_json_status();
     ESP_RETURN_ON_ERROR(err, TAG, "Couldn't release JSON status.");
@@ -219,14 +220,14 @@ static esp_err_t update_persistent_settings_from_json(
 
   char arg_buf[64];
 
-  // read eth_use_static field
-  esp_err_t err = httpd_query_key_value(post_buf, "eth_use_static", arg_buf,
-                                        sizeof(arg_buf));
+  // read eth_use_dhcp field
+  esp_err_t err =
+      httpd_query_key_value(post_buf, "eth_use_dhcp", arg_buf, sizeof(arg_buf));
   if (err == ESP_OK) {
     if (strncasecmp(arg_buf, "true", 4) == 0)
-      cnf->eth_use_static = true;
+      cnf->eth_use_dhcp = true;
     else
-      cnf->eth_use_static = false;
+      cnf->eth_use_dhcp = false;
   } else if (err != ESP_ERR_NOT_FOUND) {
     return err;
   }
@@ -295,14 +296,14 @@ static esp_err_t update_persistent_settings_from_json(
     return err;
   }
 
-  // read wifi_use_static field
-  err = httpd_query_key_value(post_buf, "wifi_use_static", arg_buf,
+  // read wifi_use_dhcp field
+  err = httpd_query_key_value(post_buf, "wifi_use_dhcp", arg_buf,
                               sizeof(arg_buf));
   if (err == ESP_OK) {
     if (strncasecmp(arg_buf, "true", 4) == 0)
-      cnf->wifi_use_static = true;
+      cnf->wifi_use_dhcp = true;
     else
-      cnf->wifi_use_static = false;
+      cnf->wifi_use_dhcp = false;
   } else if (err != ESP_ERR_NOT_FOUND) {
     return err;
   }

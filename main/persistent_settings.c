@@ -21,14 +21,14 @@ static char persistent_settings_json_data[1024];
 static void button_handler(void *button_handle, void *usr_data);
 
 const persistent_settings_t persistent_settings_default = {
-    .eth_use_static = true,
+    .eth_use_dhcp = false,
     .eth_ip_info.ip.addr = ESP_IP4TOADDR(192, 168, 2, 163),
     .eth_ip_info.netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0),
     .eth_ip_info.gw.addr = ESP_IP4TOADDR(192, 168, 2, 1),
     .wifi_enabled = false,
     .wifi_ssid = "ssid_changeme",
     .wifi_pass = "password_changeme",
-    .wifi_use_static = false,
+    .wifi_use_dhcp = true,
     .wifi_ip_info.ip.addr = ESP_IP4TOADDR(192, 168, 2, 163),
     .wifi_ip_info.netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0),
     .wifi_ip_info.gw.addr = ESP_IP4TOADDR(192, 168, 2, 1),
@@ -92,7 +92,7 @@ esp_err_t persistent_settings_load() {
   int bytes_written = snprintf(
       persistent_settings_json_data, sizeof(persistent_settings_json_data),
       "{\n"
-      "\"eth_use_static\": "
+      "\"eth_use_dhcp\": "
       "%s,\n"
 
       "\"eth_ip\": "
@@ -116,7 +116,7 @@ esp_err_t persistent_settings_load() {
       "\"wifi_pass\": "
       "\"******\",\n"
 
-      "\"wifi_use_static\": "
+      "\"wifi_use_dhcp\": "
       "%s,\n"
 
       "\"wifi_ip\": "
@@ -135,14 +135,14 @@ esp_err_t persistent_settings_load() {
       "%d\n"
 
       "}\n",
-      persistent_settings->eth_use_static ? "true" : "false",
+      persistent_settings->eth_use_dhcp ? "true" : "false",
       IP2STR(&persistent_settings->eth_ip_info.ip),
       IP2STR(&persistent_settings->eth_ip_info.netmask),
       IP2STR(&persistent_settings->eth_ip_info.gw),
       persistent_settings->wifi_enabled ? "true" : "false",
       persistent_settings->wifi_ssid,
       // current_config.wifi_pass,
-      persistent_settings->wifi_use_static ? "true" : "false",
+      persistent_settings->wifi_use_dhcp ? "true" : "false",
       IP2STR(&persistent_settings->wifi_ip_info.ip),
       IP2STR(&persistent_settings->wifi_ip_info.netmask),
       IP2STR(&persistent_settings->wifi_ip_info.gw),

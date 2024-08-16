@@ -5,11 +5,8 @@
 #include "persistent_settings.h"
 #include "socketcand_server.h"
 
-// Uncomment to debug heap usage:
-// #include "esp_heap_caps.h"
-
 // Name that will be used for logging
-static const char *TAG = "main";
+static const char* TAG = "main";
 
 void app_main(void) {
   // Create an event loop.
@@ -48,12 +45,13 @@ void app_main(void) {
 
   // start wifi driver
   if (persistent_settings->wifi_enabled) {
-    if (persistent_settings->wifi_use_static) {
+    if (persistent_settings->wifi_use_dhcp) {
+      err = driver_setup_wifi(NULL, persistent_settings->wifi_ssid,
+                              persistent_settings->wifi_pass);
+
+    } else {
       err = driver_setup_wifi(&persistent_settings->wifi_ip_info,
                               persistent_settings->wifi_ssid,
-                              persistent_settings->wifi_pass);
-    } else {
-      err = driver_setup_wifi(NULL, persistent_settings->wifi_ssid,
                               persistent_settings->wifi_pass);
     }
 
@@ -64,10 +62,10 @@ void app_main(void) {
   }
 
   // start ethernet driver
-  if (persistent_settings->eth_use_static) {
-    err = driver_setup_ethernet(&persistent_settings->eth_ip_info);
-  } else {
+  if (persistent_settings->eth_use_dhcp) {
     err = driver_setup_ethernet(NULL);
+  } else {
+    err = driver_setup_ethernet(&persistent_settings->eth_ip_info);
   }
 
   if (err != ESP_OK) {
@@ -82,21 +80,23 @@ void app_main(void) {
   ESP_ERROR_CHECK(socketcand_server_start(29536));
 
   // start the UDP beacon
-  if (discovery_beacon_start() == -1) {
-    ESP_LOGE(TAG, "Couldn't start UDP beacon. Aborting.");
-    abort();
+  if (discovery_beacon_start() != ESP_OK) {
+    ESP_LOGE(TAG, "CRITICAL: Couldn't start UDP beacon: %s",
+             esp_err_to_name(err));
   }
 
-  // Uncomment below to debug heap usage:
-  /*
-  while (true) {
-    vTaskDelay(pdMS_TO_TICKS(5000));
-    size_t min_free = heap_caps_get_minimum_free_size(MALLOC_CAP_DEFAULT);
-    size_t largest =
-  heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
-
-    ESP_LOGI(TAG, "Lowest number of free heap bytes: %d", min_free);
-    ESP_LOGI(TAG, "Largest current free block: %d", largest);
+  // Log network status:
+  vTaskDelay(pdMS_TO_TICKS(10000));
+  const char* json_status;
+  err = driver_setup_get_status_json(&json_status);
+  if (err == ESP_OK) {
+    ESP_LOGI(TAG, "Network status after startup:");
+    esp_log_write(ESP_LOG_INFO, TAG, json_status);
+  } else {
+    ESP_LOGE(TAG, "Couldn't get driver status: %s", esp_err_to_name(err));
   }
-  */
+  err = driver_setup_release_json_status();
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "CRITICAL: Couldn't release JSON status.");
+  }
 }

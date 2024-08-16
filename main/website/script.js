@@ -16,14 +16,14 @@ const network_status_data = {
 
 const network_settings_data = {
     conf: {
-        eth_use_static: false,
+        eth_use_dhcp: false,
         eth_ip: "loading...",
         eth_netmask: "loading...",
         eth_gw: "loading...",
         wifi_enabled: false,
         wifi_ssid: "loading...",
         wifi_pass: "",
-        wifi_use_static: false,
+        wifi_use_dhcp: false,
         wifi_ip: "loading...",
         wifi_netmask: "loading...",
         wifi_gw: "loading...",

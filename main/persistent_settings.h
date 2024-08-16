@@ -18,10 +18,10 @@ enum can_bitrate_setting {
 
 // Persistent settings for this socketcand adapter.
 typedef struct {
-  // Should ethernet use static IP instead of DHCP?
-  bool eth_use_static;
+  // Should ethernet use DHCP instead of static IP?
+  bool eth_use_dhcp;
 
-  // If `eth_use_static`, static IP info to use
+  // If not `eth_use_dhcp`, static IP info to use
   esp_netif_ip_info_t eth_ip_info;
 
   // Is WIFI enabled?
@@ -33,10 +33,10 @@ typedef struct {
   // WIFI password
   char wifi_pass[64];
 
-  // Should WIFI use static IP instead of DHCP?
-  bool wifi_use_static;
+  // Should WIFI use DHCP instead of static IP?
+  bool wifi_use_dhcp;
 
-  // If `wifi_use_static`, static IP info to use
+  // If not `wifi_use_dhcp`, static IP info to use
   esp_netif_ip_info_t wifi_ip_info;
 
   // Bitrate of CAN interface

@@ -15,7 +15,7 @@ Client2 <---TCP Socketcand---> |        running on         |
 Physical CAN bus (can0) <----> |---------------------------|
 ```
 
-## Pre-built binaries
+## Installation
 The *Releases* page contains pre-built `esp32_socketcand_adapter.bin` files.
 To flash them onto your ESP32 using
 [Esptool](https://docs.espressif.com/projects/esptool/en/latest/esp32/), run this command:
@@ -33,7 +33,7 @@ tail -f /dev/ttyUSB0
 
 Note: Flashing will fail if the port is being monitored.
 
-## Compilation
+## Build from source
 Alternatively, you can build the project yourself.
 
 1. Install [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/).
@@ -85,6 +85,6 @@ yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.16
 # Get the info of node 18 on the CAN bus using:
 yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',29536),99)" call 18 uavcan.node.GetInfo.1.0 '{}'
 
-# Get the name of node 18 on the CAN bus using:
+# Get the name register of node 18 on the CAN bus using:
 yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',29536),99)" call 18 uavcan.register.Access.1.0 "{'name':{'name':'NAME'}}"
 ```

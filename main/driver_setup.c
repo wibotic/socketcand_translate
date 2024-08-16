@@ -355,7 +355,7 @@ esp_err_t driver_setup_get_status_json(const char **json_out) {
 
   res = snprintf(status_json + written, sizeof(status_json) - written,
                  "{\n"
-                 "\"Ethernet\": ");
+                 "\"Ethernet status\": ");
   written += res;
   if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
@@ -368,7 +368,7 @@ esp_err_t driver_setup_get_status_json(const char **json_out) {
 
   res = snprintf(status_json + written, sizeof(status_json) - written,
                  ",\n"
-                 "\"Wi-Fi\": ");
+                 "\"Wi-Fi status\": ");
   written += res;
   if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
@@ -381,7 +381,7 @@ esp_err_t driver_setup_get_status_json(const char **json_out) {
 
   res = snprintf(status_json + written, sizeof(status_json) - written,
                  ",\n"
-                 "\"CAN Bus\": ");
+                 "\"CAN Bus status\": ");
   written += res;
   if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
@@ -408,7 +408,7 @@ esp_err_t driver_setup_get_status_json(const char **json_out) {
 
 esp_err_t driver_setup_release_json_status() {
   if (xSemaphoreGive(status_json_mutex) != pdTRUE) {
-    ESP_LOGE(TAG, "Error realising driver setup JSON status mutex.");
+    ESP_LOGE(TAG, "Error releasing driver setup JSON status mutex.");
     return ESP_FAIL;
   } else {
     return ESP_OK;
@@ -422,7 +422,7 @@ static esp_err_t print_netif_status(esp_netif_t *netif, char *buf_out,
 
   // null if netif is null
   if (netif == NULL) {
-    written = snprintf(buf_out, buflen, "null");
+    written = snprintf(buf_out, buflen, "\"Disabled\"");
   } else {
     bool is_up = esp_netif_is_netif_up(netif);
 
@@ -532,10 +532,10 @@ static esp_err_t print_can_status(char *buf_out, size_t buflen,
                "\"State\": "
                "\"%s\",\n"
 
-               "\"Number of messages queued for transmission\": "
+               "\"Total number of messages queued for transmission\": "
                "%ld,\n"
 
-               "\"Number of messages waiting in receive queue\": "
+               "\"Total number of messages waiting in receive queue\": "
                "%ld,\n"
 
                "\"Transmit error counter\": "
@@ -544,19 +544,19 @@ static esp_err_t print_can_status(char *buf_out, size_t buflen,
                "\"Receive error counter\": "
                "%ld,\n"
 
-               "\"Number of failed message transmissions\": "
+               "\"Total number of failed message transmissions\": "
                "%ld,\n"
 
-               "\"Number of failed failed message receptions\": "
+               "\"Total number of failed message receptions\": "
                "%ld,\n"
 
-               "\"Number of incoming messages lost due to FIFO overrun\": "
+               "\"Total number of incoming messages lost due to FIFO overrun\": "
                "%ld,\n"
 
-               "\"Number of arbitrations that were lost\": "
+               "\"Total number of lost arbitrations\": "
                "%ld,\n"
 
-               "\"Number of bus errors detected\": "
+               "\"Total number of bus errors\": "
                "%ld\n"
 
                "}",
