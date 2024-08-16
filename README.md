@@ -80,11 +80,11 @@ Here are some examples:
 
 ```bash
 # Monitor the CAN bus using:
-yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',29536),99)" monitor
+yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163'),99)" monitor
 
 # Get the info of node 18 on the CAN bus using:
-yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',29536),99)" call 18 uavcan.node.GetInfo.1.0 '{}'
+yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163'),99)" call 18 uavcan.node.GetInfo.1.0 '{}'
 
 # Get the name register of node 18 on the CAN bus using:
-yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163',29536),99)" call 18 uavcan.register.Access.1.0 "{'name':{'name':'NAME'}}"
+yakut --transport "CAN(can.media.socketcand.SocketcandMedia('can0','192.168.2.163'),99)" call 18 uavcan.register.Access.1.0 "{'name':{'name':'NAME'}}"
 ```
