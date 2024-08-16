@@ -35,6 +35,13 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base,
                              int32_t event_id, void *event_data);
 
 // A FreeRTOS task that gets spawned by `driver_setup_can()`.
+// It tries reconnecting to Wi-Fi every 30 seconds if
+// Wi-Fi is disconnected.
+static void wifi_recovery_task(void *pvParameters);
+static StackType_t wifi_recovery_task_stack[4096];
+static StaticTask_t wifi_recovery_task_mem;
+
+// A FreeRTOS task that gets spawned by `driver_setup_can()`.
 // It initiates CAN recovery mode whenever
 // the bus is disconnected due to excessive error count.
 static void can_recovery_task(void *pvParameters);
@@ -198,7 +205,7 @@ esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info,
   // Tell the driver to try connecting to WIFI.
   // Note: This will NOT return an error if WIFI can't connect.
   // All reconnection logic is instead handled by
-  // `wifi_event_handler()`.
+  // `wifi_event_handler()`. TODO
   err = esp_wifi_start();
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't start WIFI.");
   err = esp_wifi_connect();
@@ -210,6 +217,11 @@ esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info,
     return ESP_FAIL;
   }
   vSemaphoreDelete(internet_ready);
+
+  // Spawn a task that will reconnect to Wi-Fi if it disconnects.
+  xTaskCreateStatic(wifi_recovery_task, "wifi_recovery",
+                    sizeof(wifi_recovery_task_stack), NULL, 7,
+                    wifi_recovery_task_stack, &wifi_recovery_task_mem);
 
   driver_setup_wifi_netif = esp_netif;
   return ESP_OK;
@@ -238,7 +250,7 @@ esp_err_t driver_setup_can(const twai_timing_config_t *timing_config) {
   // Spawn a task that will put CAN in recovery mode
   // whenever it enters BUS_OFF state.
   xTaskCreateStatic(can_recovery_task, "can_recovery",
-                    sizeof(can_recovery_task_stack), NULL, 15,
+                    sizeof(can_recovery_task_stack), NULL, 7,
                     can_recovery_task_stack, &can_recovery_task_mem);
 
   return ESP_OK;
@@ -282,10 +294,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
       ESP_LOGD(TAG, "WIFI station connected.");
       break;
     case WIFI_EVENT_STA_DISCONNECTED:
-      ESP_LOGE(TAG, "WIFI station disconnected. Trying to reconnect.");
-      esp_wifi_connect();
-      // wait 10 seconds to avoid busy-looping
-      vTaskDelay(pdMS_TO_TICKS(10000));
+      ESP_LOGE(TAG, "WIFI station disconnected.");
       break;
     default:
       break;
@@ -312,10 +321,27 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base,
   ESP_LOGI(TAG, "--------------------------");
 }
 
+static void wifi_recovery_task(void *pvParameters) {
+  // Constantly re-connect to Wi-Fi if needed.
+  while (true) {
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    if (!esp_netif_is_netif_up(driver_setup_wifi_netif)) {
+      ESP_LOGE(TAG, "Retrying connecting to Wi-Fi.");
+      esp_err_t err = esp_wifi_connect();
+      if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Couldn't start connection attempt: %s",
+                 esp_err_to_name(err));
+      }
+      vTaskDelay(pdMS_TO_TICKS(28000));
+    }
+  }
+}
+
 static void can_recovery_task(void *pvParameters) {
   esp_err_t err;
   // Constantly initiate recovery if needed.
   while (true) {
+    vTaskDelay(pdMS_TO_TICKS(2000));
     // Read TWAI alerts
     uint32_t alerts;
     while (true) {
@@ -526,45 +552,45 @@ static esp_err_t print_can_status(char *buf_out, size_t buflen,
       break;
   }
 
-  int written =
-      snprintf(buf_out, buflen,
-               "{\n"
-               "\"State\": "
-               "\"%s\",\n"
+  int written = snprintf(
+      buf_out, buflen,
+      "{\n"
+      "\"State\": "
+      "\"%s\",\n"
 
-               "\"Total number of messages queued for transmission\": "
-               "%ld,\n"
+      "\"Total number of messages queued for transmission\": "
+      "%ld,\n"
 
-               "\"Total number of messages waiting in receive queue\": "
-               "%ld,\n"
+      "\"Total number of messages waiting in receive queue\": "
+      "%ld,\n"
 
-               "\"Transmit error counter\": "
-               "%ld,\n"
+      "\"Transmit error counter\": "
+      "%ld,\n"
 
-               "\"Receive error counter\": "
-               "%ld,\n"
+      "\"Receive error counter\": "
+      "%ld,\n"
 
-               "\"Total number of failed message transmissions\": "
-               "%ld,\n"
+      "\"Total number of failed message transmissions\": "
+      "%ld,\n"
 
-               "\"Total number of failed message receptions\": "
-               "%ld,\n"
+      "\"Total number of failed message receptions\": "
+      "%ld,\n"
 
-               "\"Total number of incoming messages lost due to FIFO overrun\": "
-               "%ld,\n"
+      "\"Total number of incoming messages lost due to FIFO overrun\": "
+      "%ld,\n"
 
-               "\"Total number of lost arbitrations\": "
-               "%ld,\n"
+      "\"Total number of lost arbitrations\": "
+      "%ld,\n"
 
-               "\"Total number of bus errors\": "
-               "%ld\n"
+      "\"Total number of bus errors\": "
+      "%ld\n"
 
-               "}",
-               can_state, can_status.msgs_to_tx, can_status.msgs_to_rx,
-               can_status.tx_error_counter, can_status.rx_error_counter,
-               can_status.tx_failed_count, can_status.rx_missed_count,
-               can_status.rx_overrun_count, can_status.arb_lost_count,
-               can_status.bus_error_count);
+      "}",
+      can_state, can_status.msgs_to_tx, can_status.msgs_to_rx,
+      can_status.tx_error_counter, can_status.rx_error_counter,
+      can_status.tx_failed_count, can_status.rx_missed_count,
+      can_status.rx_overrun_count, can_status.arb_lost_count,
+      can_status.bus_error_count);
 
   if (written < 0 || written >= buflen) {
     ESP_LOGE(TAG, "print_netif_status buflen too short.");
