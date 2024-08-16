@@ -63,7 +63,7 @@ const network_settings_data = {
                 post_obj[key] = this.conf[key];
             }
         }
-        
+
         if (Object.keys(post_obj).length !== 0) {
             try {
                 const response = await fetch('/api/config', {
@@ -72,7 +72,9 @@ const network_settings_data = {
                 });
                 this.status_message = await response.text();
                 if (response.ok) {
-                    window.location.reload();
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
                 }
             } catch (error) {
                 this.status_message = `ERROR: Couldn't post settings to server: ${error}`;
