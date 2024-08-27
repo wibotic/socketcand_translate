@@ -417,8 +417,12 @@ static void socketcand_to_bus_task(void *pvParameters) {
       server_status.can_bus_frames_sent += 1;
       xSemaphoreGive(server_status_mutex);
     } else {
-      ESP_LOGE(TAG, "Couldn't send frame over CAN. %s",
+      ESP_LOGE(TAG, "Couldn't transmit frame to CAN. %s",
                esp_err_to_name(can_res));
+
+      xSemaphoreTake(server_status_mutex, portMAX_DELAY);
+      server_status.can_bus_frames_send_fails += 1;
+      xSemaphoreGive(server_status_mutex);
     }
   }
   delete_serve_client_task(client_handler_data);

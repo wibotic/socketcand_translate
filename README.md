@@ -15,6 +15,8 @@ Client2 <---TCP Socketcand---> |        running on         |
 Physical CAN bus (can0) <----> |---------------------------|
 ```
 
+![Example ESP32 Socketcand Translate Setup](socketcand_adapter_labeled.jpg)
+
 ## Installation
 The *Releases* page contains pre-built `esp32_socketcand_adapter.bin` files.
 To flash them onto your ESP32 using

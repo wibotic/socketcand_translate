@@ -294,22 +294,28 @@ static esp_err_t print_socketcand_status(char *buf_out, size_t buflen,
                "\"Total socketcand frames received from internet\": "
                "\"%lld\",\n"
 
+               "\"Total invalid socketcand frames received from internet\": "
+               "\"%lld\",\n"
+
                "\"Total frames sent to CAN bus\": "
+               "\"%lld\",\n"
+
+               "\"Total CAN transmit fails\": "
                "\"%lld\",\n"
 
                "\"Total frames received from CAN bus\": "
                "\"%lld\",\n"
 
                "\"Total socketcand frames sent to internet\": "
-               "\"%lld\",\n"
-
-               "\"Total invalid socketcand frames received from internet\": "
                "\"%lld\"\n"
 
                "}",
-               status.socketcand_frames_received, status.can_bus_frames_sent,
-               status.can_bus_frames_received, status.socketcand_frames_sent,
-               status.invalid_socketcand_frames_received);
+               status.socketcand_frames_received,
+               status.invalid_socketcand_frames_received,
+               status.can_bus_frames_sent, status.can_bus_frames_send_fails,
+               status.can_bus_frames_received, status.socketcand_frames_sent
+
+      );
 
   if (written < 0 || written >= buflen) {
     ESP_LOGE(TAG, "print_netif_status buflen too short.");

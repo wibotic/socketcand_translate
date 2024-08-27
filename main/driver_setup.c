@@ -312,7 +312,8 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base,
 static void wifi_recovery_task(void *pvParameters) {
   // Constantly re-connect to Wi-Fi if needed.
   while (true) {
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    // Check Wi-Fi status every 5 seconds
+    vTaskDelay(pdMS_TO_TICKS(5000));
     if (!esp_netif_is_netif_up(driver_setup_wifi_netif)) {
       ESP_LOGE(TAG, "Retrying connecting to Wi-Fi.");
       esp_err_t err = esp_wifi_connect();
@@ -320,33 +321,40 @@ static void wifi_recovery_task(void *pvParameters) {
         ESP_LOGE(TAG, "Couldn't start connection attempt: %s",
                  esp_err_to_name(err));
       }
-      vTaskDelay(pdMS_TO_TICKS(28000));
+      // Wait 20 seconds after re-connection attempt before trying again
+      vTaskDelay(pdMS_TO_TICKS(15000));
     }
   }
 }
 
 static void can_recovery_task(void *pvParameters) {
-  esp_err_t err;
   // Constantly initiate recovery if needed.
   while (true) {
-    vTaskDelay(pdMS_TO_TICKS(2000));
-    // Read TWAI alerts
-    uint32_t alerts;
-    while (true) {
-      err = twai_read_alerts(&alerts, portMAX_DELAY);
-      if (err == ESP_OK) {
-        break;
-      } else {
-        ESP_LOGE(TAG, "Couldn't read CAN alerts: %s", esp_err_to_name(err));
-      }
+    // Check CAN status every 5 seconds
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    twai_status_info_t status;
+    esp_err_t err = twai_get_status_info(&status);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Couldn't get CAN status.");
+      continue;
     }
-    // If the bus is off, enter recovery mode.
-    if ((alerts & TWAI_ALERT_BUS_OFF) != 0) {
+
+    if (status.state == TWAI_STATE_BUS_OFF) {
       err = twai_initiate_recovery();
       if (err == ESP_OK) {
         ESP_LOGE(TAG, "Initiated CAN recovery.");
       } else {
         ESP_LOGE(TAG, "Couldn't initiate CAN recovery: %s",
+                 esp_err_to_name(err));
+      }
+    }
+
+    if (status.state == TWAI_STATE_STOPPED) {
+      err = twai_start();
+      if (err == ESP_OK) {
+        ESP_LOGE(TAG, "Restarted CAN driver.");
+      } else {
+        ESP_LOGE(TAG, "Couldn't restart the CAN driver: %s",
                  esp_err_to_name(err));
       }
     }
