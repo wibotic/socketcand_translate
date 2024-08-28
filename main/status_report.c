@@ -3,6 +3,7 @@
 #include "driver/twai.h"
 #include "esp_check.h"
 #include "esp_netif_types.h"
+#include "esp_timer.h"
 #include "freertos/semphr.h"
 #include "socketcand_server.h"
 #include "string.h"
@@ -43,8 +44,20 @@ esp_err_t status_report_get(const char **json_out, esp_netif_t *eth_netif,
   int res;
   size_t written = 0;
 
+  // Print the uptime
+  int64_t seconds = esp_timer_get_time() / 1000000;
   res = snprintf(status_json + written, sizeof(status_json) - written,
                  "{\n"
+                 "\"Uptime (seconds)\": %lld,\n",
+                 seconds);
+  written += res;
+  if (res < 0 || written >= sizeof(status_json)) {
+    ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
+    return ESP_ERR_NO_MEM;
+  }
+
+  // Print the ethernet status
+  res = snprintf(status_json + written, sizeof(status_json) - written,
                  "\"Ethernet status\": ");
   written += res;
   if (res < 0 || written >= sizeof(status_json)) {
@@ -56,6 +69,7 @@ esp_err_t status_report_get(const char **json_out, esp_netif_t *eth_netif,
                            sizeof(status_json) - written, &written);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't print ethernet status.");
 
+  // Print the Wi-Fi status
   res = snprintf(status_json + written, sizeof(status_json) - written,
                  ",\n"
                  "\"Wi-Fi status\": ");
@@ -69,6 +83,7 @@ esp_err_t status_report_get(const char **json_out, esp_netif_t *eth_netif,
                            sizeof(status_json) - written, &written);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't print Wi-Fi netif status.");
 
+  // Print the CAN bus status
   res = snprintf(status_json + written, sizeof(status_json) - written,
                  ",\n"
                  "\"CAN Bus status\": ");
@@ -82,6 +97,7 @@ esp_err_t status_report_get(const char **json_out, esp_netif_t *eth_netif,
                          &written);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't print CAN bus status.");
 
+  // Print the Socketcand status
   res = snprintf(status_json + written, sizeof(status_json) - written,
                  ",\n"
                  "\"Socketcand adapter status\": ");

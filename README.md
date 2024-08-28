@@ -15,6 +15,8 @@ Client2 <---TCP Socketcand---> |        running on         |
 Physical CAN bus (can0) <----> |---------------------------|
 ```
 
+Here's an image of an example setup:
+
 ![Example ESP32 Socketcand Translate Setup](socketcand_adapter_labeled.jpg)
 
 ## Installation

@@ -7,7 +7,7 @@ const network_status_data = {
     // Start continuously fetching `status` in the background.
     async fetch_update() {
         try {
-            this.status = await (await fetch('/api/status')).json();
+            this.status = await (await fetch('/api/status', { signal: AbortSignal.timeout(5000) })).json();
             this.status_message = '';
         } catch (error) {
             this.status_message = `ERROR: Couldn't fetch status from server: ${error}`;
@@ -37,7 +37,7 @@ const network_settings_data = {
     // Fetch the server's configuration.
     async fetch_update() {
         try {
-            const text = await (await fetch('/api/config')).text();
+            const text = await (await fetch('/api/config', { signal: AbortSignal.timeout(5000) })).text();
             this.original_conf = JSON.parse(text);
             this.conf = JSON.parse(text);
             this.status_message = '';
@@ -72,7 +72,8 @@ const network_settings_data = {
             try {
                 const response = await fetch('/api/config', {
                     method: 'POST',
-                    body: new URLSearchParams(post_obj)
+                    body: new URLSearchParams(post_obj),
+                    signal: AbortSignal.timeout(5000)
                 });
                 this.status_message = await response.text();
 
