@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang='en'>
+
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <meta name="description" content="ESP32 Socketcand Adapter">
+    <meta name="author" content="WiBotic">
+    <link rel="icon" href="/favicon.svg" sizes="any" type="image/svg+xml">
+    <title>Socketcand Adapter</title>
+    <script defer src="/script.js"></script>
+    <script defer src='/alpine.js'></script>
+    <style>
+        body {
+            background-color: #98d7f7;
+            font-family: sans-serif;
+        }
+
+        main {
+            max-width: 1000px;
+            margin: auto;
+            padding: 15px;
+            background-color: #ffffff;
+            min-height: 100%;
+            box-shadow: 0 0 15px 0px #4493c3;
+        }
+
+        h1 {
+            max-width: 1000px;
+            margin: auto;
+            margin-top: 15px;
+            margin-bottom: 15px;
+            padding: 15px;
+            background-color: #4493c3;
+            color: #ffffff;
+            text-align: center;
+            box-shadow: 0 0 15px 0px #4493c3;
+        }
+
+        table {
+            border-collapse: collapse;
+            box-shadow: 0 0 5px 0px #727272;
+        }
+
+        td {
+            border: 1px solid #dddddd;
+            text-align: left;
+            padding: 10px;
+        }
+
+        tr:nth-child(even) td:nth-child(1) {
+            font-weight: bold;
+            background-color: #f8f8f8;
+        }
+
+        tr:nth-child(odd) td:nth-child(1) {
+            font-weight: bold;
+            background-color: #e0e0e0;
+        }
+
+        .status_message {
+            background: #fff8ba;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>ESP32 Socketcand Adapter</h1>
+    <main>
+        <p>
+            This webpage is served by an
+            <a href="https://github.com/wibotic/socketcand_translate">ESP32-EVB Socketcand Adapter</a>.
+            This adapter serves a minimal subset of
+            <a href='https://github.com/linux-can/socketcand/blob/master/doc/protocol.md'>Socketcand rawmode</a>
+            on port 29536.
+        </p>
+
+        <noscript>
+            <strong>
+                This site requires JavaScript. Please enable it.
+            </strong>
+        </noscript>
+
+        <h2>Network Status</h2>
+        <div x-data="network_status_data" x-init="fetch_update">
+            <template x-if="status">
+                <template x-for="key of Object.keys(status)">
+                    <div>
+                        <h3 x-text="`${key}`"></h3>
+                        <template x-if="typeof status[key] !== 'object' || status[key] === null">
+                            <span x-text="`${status[key]}`"></span>
+                        </template>
+                        <template x-if="typeof status[key] === 'object' && status[key] !== null">
+                            <table>
+                                <template x-for="key2 of Object.keys(status[key])">
+                                    <tr>
+                                        <td x-text="`${key2}:`"></td>
+                                        <td x-text="`${status[key][key2]}`"></td>
+                                    </tr>
+                                </template>
+                            </table>
+                        </template>
+                    </div>
+                </template>
+            </template>
+            <p class="status_message" x-text='status_message'></p>
+        </div>
+
+
+        <h2>Network Settings</h2>
+        <p>
+            The current configuration is in the input fields.
+            Change anything, and click submit to save the settings and reboot the adapter.
+            Only non-empty fields will be saved.
+            Incorrect configuration may cause the adapter to go offline.
+            In that case, hold button <code>BUT 1</code> for one second, to reset configuration back to defaults.
+        </p>
+
+        <form x-data='network_settings_data' x-init="fetch_update" x-on:submit.prevent="submit" action=''>
+            <table>
+                <tr>
+                    <td>
+                        <label for='eth_use_dhcp'>
+                            Use DHCP for ethernet:
+                        </label>
+                    </td>
+                    <td>
+                        <input type='checkbox' id='eth_use_dhcp' x-model='conf.eth_use_dhcp'>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <label for='eth_ip'>
+                            Ethernet static IP (if DHCP disabled):
+                        </label>
+                    </td>
+                    <td>
+                        <input type='text' id='eth_ip' x-model='conf.eth_ip'>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <label for='eth_netmask'>
+                            Ethernet netmask IP (if DHCP disabled):
+                        </label>
+                    </td>
+                    <td>
+                        <input type='text' id='eth_netmask' x-model='conf.eth_netmask'>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <label for='eth_gw'>
+                            Ethernet gateway IP (if DHCP disabled):
+                        </label>
+                    </td>
+                    <td>
+                        <input type='text' id='eth_gw' x-model='conf.eth_gw'>
+                    </td>
+                </tr>
+
+
+                <tr>
+                    <td>
+                        <label for='wifi_enabled'>
+                            Wi-Fi enabled:
+                        </label>
+                    </td>
+                    <td>
+                        <input type='checkbox' id='wifi_enabled' x-model='conf.wifi_enabled'>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <label for='wifi_ssid'>
+                            Wi-Fi SSID name:
+                        </label>
+                    </td>
+                    <td>
+                        <input type='text' id='wifi_ssid' x-model='conf.wifi_ssid'>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <label for='wifi_pass'>
+                            Wi-Fi password (not shown):
+                        </label>
+                    </td>
+                    <td>
+                        <input type='password' id='wifi_pass' x-model='conf.wifi_pass'>
+                    </td>
+                </tr>
+
+
+                <tr>
+                    <td>
+                        <label for='wifi_use_dhcp'>
+                            Use DHCP for Wi-Fi:
+                        </label>
+                    </td>
+                    <td>
+                        <input type='checkbox' id='wifi_use_dhcp' x-model='conf.wifi_use_dhcp'>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <label for='wifi_ip'>
+                            Wi-Fi static IP (if DHCP disabled):
+                        </label>
+                    </td>
+                    <td>
+                        <input type='text' id='wifi_ip' x-model='conf.wifi_ip'>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <label for='wifi_netmask'>
+                            Wi-Fi netmask IP (if DHCP disabled):
+                        </label>
+                    </td>
+                    <td>
+                        <input type='text' id='wifi_netmask' x-model='conf.wifi_netmask'>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <label for='wifi_gw'>
+                            Wi-Fi gateway IP (if DHCP disabled):
+                        </label>
+                    </td>
+                    <td>
+                        <input type='text' id='wifi_gw' x-model='conf.wifi_gw'>
+                    </td>
+                </tr>
+
+
+                <tr>
+                    <td>
+                        <label for='can_bitrate'>
+                            CAN Bitrate (kbit/s)
+                        </label>
+                    </td>
+                    <td>
+                        <select id="can_bitrate" x-model="conf.can_bitrate">
+                            <option>25</option>
+                            <option>50</option>
+                            <option>100</option>
+                            <option>125</option>
+                            <option>250</option>
+                            <option>500</option>
+                            <option>800</option>
+                            <option>1000</option>
+                        </select>
+                    </td>
+                </tr>
+
+            </table>
+            <input type='submit' value='Submit'>
+
+            <p class="status_message" x-text='status_message'></p>
+
+
+        </form>
+
+    </main>
+</body>
+
+</html>
