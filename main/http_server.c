@@ -1,11 +1,10 @@
 #include "http_server.h"
 
+#include "driver_setup.h"
 #include "esp_check.h"
 #include "esp_http_server.h"
-
 #include "persistent_settings.h"
 #include "status_report.h"
-#include "driver_setup.h"
 
 // Name that will be used for logging
 #define TAG "http_server"
@@ -93,10 +92,13 @@ static const httpd_uri_t post_api_config_handler = {
 // Updates `persistent_settings` from `json`.
 // `persistent_settings` must be the current settings,
 // and they are changed to updated settings based on `json`.
+// tmp_arg_buf must point to at least 256 bytes of memory that this
+// function can temporarily use.
 // On success, restarts the microcontroller.
 // On failure, returns an error.
 static esp_err_t update_persistent_settings_from_json(
-    const char *json, persistent_settings_t *persistent_settings);
+    const char *json, char *tmp_arg_buf,
+    persistent_settings_t *persistent_settings);
 
 esp_err_t start_http_server(void) {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -135,7 +137,8 @@ static esp_err_t serve_get_api_status(httpd_req_t *req) {
 
   const char *status_json;
 
-  err = status_report_get(&status_json, driver_setup_eth_netif, driver_setup_wifi_netif);
+  err = status_report_get(&status_json, driver_setup_eth_netif,
+                          driver_setup_wifi_netif);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Couldn't get current driver status: %s",
              esp_err_to_name(err));
@@ -153,8 +156,10 @@ static esp_err_t serve_get_api_status(httpd_req_t *req) {
   return http_err;
 }
 
-// Stores the body of the request in `serve_post_api_config()`.
-static char post_buf[1024];
+// Temporarily stores the body of
+// the request in `serve_post_api_config()`.
+static char post_buf[2048];
+static char tmp_arg_buf[256];
 SemaphoreHandle_t post_buf_mutex = NULL;
 StaticSemaphore_t post_buf_mutex_mem;
 
@@ -177,6 +182,7 @@ static esp_err_t serve_post_api_config(httpd_req_t *req) {
 
   // If unexpected post_buf length
   if (ret != req->content_len) {
+    xSemaphoreGive(post_buf_mutex);
     httpd_resp_send_err(req, 500, "Couldn't read POST post_buf");
     ESP_LOGE(TAG, "Couldn't read POST post_buf.");
     return ret;
@@ -184,47 +190,62 @@ static esp_err_t serve_post_api_config(httpd_req_t *req) {
 
   post_buf[req->content_len] = '\0';
 
-  // Get the updated persistent_settings
+  // Parse the posted JSON
   persistent_settings_t new_persistent_settings = *persistent_settings;
-  esp_err_t err =
-      update_persistent_settings_from_json(post_buf, &new_persistent_settings);
+  esp_err_t err = update_persistent_settings_from_json(
+      post_buf, tmp_arg_buf, &new_persistent_settings);
 
+  xSemaphoreGive(post_buf_mutex);
+
+  // If couldn't parse the posted JSON
   if (err != ESP_OK) {
-    ESP_LOGW(TAG, "Error parsing POSTed persistent settings JSON: %s",
+    ESP_LOGE(TAG, "Error parsing POSTed persistent settings JSON: %s",
              esp_err_to_name(err));
     httpd_resp_send_err(req, 400,
                         "Couldn't parse the given settings. Make sure they're "
                         "formatted correctly!");
-    xSemaphoreGive(post_buf_mutex);
     return ESP_FAIL;
   }
 
-  //// Save the new configuration
+  // Save the new configuration
 
-  httpd_resp_send(req, "Updating settings...", HTTPD_RESP_USE_STRLEN);
+  httpd_resp_send(req, "Updating settings and restarting adapter...",
+                  HTTPD_RESP_USE_STRLEN);
 
   err = persistent_settings_save(&new_persistent_settings);
 
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Couldn't save persistent settings.");
-    xSemaphoreGive(post_buf_mutex);
     return ESP_FAIL;
   }
 
-  xSemaphoreGive(post_buf_mutex);
   return ESP_OK;
 }
 
 static esp_err_t update_persistent_settings_from_json(
-    const char *json, persistent_settings_t *persistent_settings) {
+    const char *json, char *tmp_arg_buf,
+    persistent_settings_t *persistent_settings) {
   // rebind for brevity
   persistent_settings_t *cnf = persistent_settings;
+  char *arg_buf = tmp_arg_buf;
+  esp_err_t err;
 
-  char arg_buf[64];
+  // `tmp_arg_buf` must be at least this size
+  // according to this function's doc comment.
+  size_t arg_buf_size = 256;
+
+  // read eth_hostname field
+  memset(arg_buf, 0, sizeof(cnf->eth_hostname));
+  err = httpd_query_key_value(post_buf, "eth_hostname", arg_buf,
+                              sizeof(cnf->eth_hostname));
+  if (err == ESP_OK) {
+    memcpy(cnf->eth_hostname, arg_buf, sizeof(cnf->eth_hostname));
+  } else if (err != ESP_ERR_NOT_FOUND) {
+    return err;
+  }
 
   // read eth_use_dhcp field
-  esp_err_t err =
-      httpd_query_key_value(post_buf, "eth_use_dhcp", arg_buf, sizeof(arg_buf));
+  err = httpd_query_key_value(post_buf, "eth_use_dhcp", arg_buf, arg_buf_size);
   if (err == ESP_OK) {
     if (strncasecmp(arg_buf, "true", 4) == 0)
       cnf->eth_use_dhcp = true;
@@ -235,7 +256,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read eth_ip field
-  err = httpd_query_key_value(post_buf, "eth_ip", arg_buf, sizeof(arg_buf));
+  err = httpd_query_key_value(post_buf, "eth_ip", arg_buf, arg_buf_size);
   if (err == ESP_OK) {
     err = esp_netif_str_to_ip4(arg_buf, &cnf->eth_ip_info.ip);
     if (err != ESP_OK) {
@@ -246,8 +267,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read eth_netmask field
-  err =
-      httpd_query_key_value(post_buf, "eth_netmask", arg_buf, sizeof(arg_buf));
+  err = httpd_query_key_value(post_buf, "eth_netmask", arg_buf, arg_buf_size);
   if (err == ESP_OK) {
     err = esp_netif_str_to_ip4(arg_buf, &cnf->eth_ip_info.netmask);
     if (err != ESP_OK) {
@@ -258,7 +278,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read eth_gw field
-  err = httpd_query_key_value(post_buf, "eth_gw", arg_buf, sizeof(arg_buf));
+  err = httpd_query_key_value(post_buf, "eth_gw", arg_buf, arg_buf_size);
   if (err == ESP_OK) {
     err = esp_netif_str_to_ip4(arg_buf, &cnf->eth_ip_info.gw);
     if (err != ESP_OK) {
@@ -269,8 +289,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read wifi_enabled field
-  err =
-      httpd_query_key_value(post_buf, "wifi_enabled", arg_buf, sizeof(arg_buf));
+  err = httpd_query_key_value(post_buf, "wifi_enabled", arg_buf, arg_buf_size);
   if (err == ESP_OK) {
     if (strncasecmp(arg_buf, "true", 4) == 0)
       cnf->wifi_enabled = true;
@@ -281,6 +300,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read wifi_ssid field
+  memset(arg_buf, 0, sizeof(cnf->wifi_ssid));
   err = httpd_query_key_value(post_buf, "wifi_ssid", arg_buf,
                               sizeof(cnf->wifi_ssid));
   if (err == ESP_OK) {
@@ -290,6 +310,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read wifi_pass field
+  memset(arg_buf, 0, sizeof(cnf->wifi_pass));
   err = httpd_query_key_value(post_buf, "wifi_pass", arg_buf,
                               sizeof(cnf->wifi_pass));
   if (err == ESP_OK) {
@@ -298,9 +319,18 @@ static esp_err_t update_persistent_settings_from_json(
     return err;
   }
 
+  // read wifi_hostname field
+  memset(arg_buf, 0, sizeof(cnf->wifi_hostname));
+  err = httpd_query_key_value(post_buf, "wifi_hostname", arg_buf,
+                              sizeof(cnf->wifi_hostname));
+  if (err == ESP_OK) {
+    memcpy(cnf->wifi_hostname, arg_buf, sizeof(cnf->wifi_hostname));
+  } else if (err != ESP_ERR_NOT_FOUND) {
+    return err;
+  }
+
   // read wifi_use_dhcp field
-  err = httpd_query_key_value(post_buf, "wifi_use_dhcp", arg_buf,
-                              sizeof(arg_buf));
+  err = httpd_query_key_value(post_buf, "wifi_use_dhcp", arg_buf, arg_buf_size);
   if (err == ESP_OK) {
     if (strncasecmp(arg_buf, "true", 4) == 0)
       cnf->wifi_use_dhcp = true;
@@ -311,7 +341,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read wifi_ip field
-  err = httpd_query_key_value(post_buf, "wifi_ip", arg_buf, sizeof(arg_buf));
+  err = httpd_query_key_value(post_buf, "wifi_ip", arg_buf, arg_buf_size);
   if (err == ESP_OK) {
     err = esp_netif_str_to_ip4(arg_buf, &cnf->wifi_ip_info.ip);
     if (err != ESP_OK) {
@@ -322,8 +352,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read wifi_netmask field
-  err =
-      httpd_query_key_value(post_buf, "wifi_netmask", arg_buf, sizeof(arg_buf));
+  err = httpd_query_key_value(post_buf, "wifi_netmask", arg_buf, arg_buf_size);
   if (err == ESP_OK) {
     err = esp_netif_str_to_ip4(arg_buf, &cnf->wifi_ip_info.netmask);
     if (err != ESP_OK) {
@@ -334,7 +363,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read wifi_gw field
-  err = httpd_query_key_value(post_buf, "wifi_gw", arg_buf, sizeof(arg_buf));
+  err = httpd_query_key_value(post_buf, "wifi_gw", arg_buf, arg_buf_size);
   if (err == ESP_OK) {
     err = esp_netif_str_to_ip4(arg_buf, &cnf->wifi_ip_info.gw);
     if (err != ESP_OK) {
@@ -345,8 +374,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read can_bitrate field
-  err =
-      httpd_query_key_value(post_buf, "can_bitrate", arg_buf, sizeof(arg_buf));
+  err = httpd_query_key_value(post_buf, "can_bitrate", arg_buf, arg_buf_size);
   if (err == ESP_OK) {
     long num = strtol(arg_buf, NULL, 10);
 

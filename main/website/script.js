@@ -68,27 +68,31 @@ const network_settings_data = {
             }
         }
 
-        if (Object.keys(post_obj).length !== 0) {
-            try {
-                const response = await fetch('/api/config', {
-                    method: 'POST',
-                    body: new URLSearchParams(post_obj),
-                    signal: AbortSignal.timeout(5000)
-                });
-                this.status_message = await response.text();
-
-                // If the response is OK, the server will restart,
-                // so reload the page
-                if (response.ok) {
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 2000);
-                }
-            } catch (error) {
-                this.status_message = `ERROR: Couldn't post settings to server: ${error}`;
-            }
-        } else {
-            this.status_message = 'No request sent because no fields were updated.';
+        // Return if there are no fields to post.
+        if (Object.keys(post_obj).length === 0) {
+            this.status_message = 'Settings were not saved because no fields were modified.';
+            return;
         }
-    },
+
+        // Post the settings
+        try {
+            const response = await fetch('/api/config', {
+                method: 'POST',
+                body: new URLSearchParams(post_obj),
+                signal: AbortSignal.timeout(5000)
+            });
+            this.status_message = await response.text();
+
+            // If the response is OK, the server will restart,
+            // so reload the page
+            if (response.ok) {
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            }
+        } catch (error) {
+            this.status_message = `ERROR: Couldn't post settings to server: ${error}`;
+        }
+
+    }
 };

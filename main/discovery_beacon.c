@@ -55,8 +55,8 @@ static void discovery_beacon_task(void* pvParameters) {
 
     int bytes_printed = 0;
     int res = snprintf(msg_buf + bytes_printed, sizeof(msg_buf) - bytes_printed,
-                       "<CANBeacon name='ESP32-socketcand' type='adapter' "
-                       "description='ESP32-EVB socketcand adapter'>\n");
+                       "<CANBeacon name='esp32_socketcand_adapter' type='adapter' "
+                       "description='socketcand running on ESP32-EVB Olimex'>\n");
     bytes_printed += res;
     if (res < 0 || bytes_printed >= sizeof(msg_buf)) {
       ESP_LOGE(TAG, "Couldn't snprintf CAN beacon message.");
@@ -70,7 +70,7 @@ static void discovery_beacon_task(void* pvParameters) {
 
       res =
           snprintf(msg_buf + bytes_printed, sizeof(msg_buf) - bytes_printed,
-                   "<URL>can://%d.%d.%d.%d:9999</URL>\n", IP2STR(&ip_info.ip));
+                   "<URL>can://%d.%d.%d.%d:29536</URL>\n", IP2STR(&ip_info.ip));
       bytes_printed += res;
       if (res < 0 || bytes_printed >= sizeof(msg_buf)) {
         ESP_LOGE(TAG, "Couldn't snprintf CAN beacon message.");
@@ -85,7 +85,7 @@ static void discovery_beacon_task(void* pvParameters) {
 
       res =
           snprintf(msg_buf + bytes_printed, sizeof(msg_buf) - bytes_printed,
-                   "<URL>can://%d.%d.%d.%d:9999</URL>\n", IP2STR(&ip_info.ip));
+                   "<URL>can://%d.%d.%d.%d:29536</URL>\n", IP2STR(&ip_info.ip));
       bytes_printed += res;
       if (res < 0 || bytes_printed >= sizeof(msg_buf)) {
         ESP_LOGE(TAG, "Couldn't snprintf CAN beacon message.");
@@ -94,7 +94,7 @@ static void discovery_beacon_task(void* pvParameters) {
     }
 
     res = snprintf(msg_buf + bytes_printed, sizeof(msg_buf) - bytes_printed,
-                   "<Bus name='can0'/>\n"
+                   "<Bus name='vcan0'/>\n"
                    "</CANBeacon>\n");
     bytes_printed += res;
     if (res < 0 || bytes_printed >= sizeof(msg_buf)) {

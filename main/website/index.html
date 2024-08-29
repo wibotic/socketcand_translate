@@ -21,7 +21,6 @@
             margin: auto;
             padding: 15px;
             background-color: #ffffff;
-            min-height: 100%;
             box-shadow: 0 0 15px 0px #4493c3;
         }
 
@@ -43,9 +42,9 @@
         }
 
         td {
-            border: 1px solid #dddddd;
+            border: 1px solid #cccccc;
             text-align: left;
-            padding: 10px;
+            padding: 8px;
         }
 
         tr:nth-child(even) td:nth-child(1) {
@@ -59,7 +58,8 @@
         }
 
         .status_message {
-            background: #fff8ba;
+            background: #fff7ae;
+            padding: 10px;
         }
     </style>
 </head>
@@ -81,31 +81,6 @@
             </strong>
         </noscript>
 
-        <h2>Network Status</h2>
-        <div x-data="network_status_data" x-init="fetch_update">
-            <template x-if="status">
-                <template x-for="key of Object.keys(status)">
-                    <div>
-                        <h3 x-text="`${key}`"></h3>
-                        <template x-if="typeof status[key] !== 'object' || status[key] === null">
-                            <span x-text="`${status[key]}`"></span>
-                        </template>
-                        <template x-if="typeof status[key] === 'object' && status[key] !== null">
-                            <table>
-                                <template x-for="key2 of Object.keys(status[key])">
-                                    <tr>
-                                        <td x-text="`${key2}:`"></td>
-                                        <td x-text="`${status[key][key2]}`"></td>
-                                    </tr>
-                                </template>
-                            </table>
-                        </template>
-                    </div>
-                </template>
-            </template>
-            <p class="status_message" x-text='status_message'></p>
-        </div>
-
 
         <h2>Network Settings</h2>
         <p>
@@ -118,6 +93,17 @@
 
         <form x-data='network_settings_data' x-init="fetch_update" x-on:submit.prevent="submit" action=''>
             <table>
+                <tr>
+                    <td>
+                        <label for='eth_hostname'>
+                            Ethernet hostname:
+                        </label>
+                    </td>
+                    <td>
+                        <input type='text' id='eth_hostname' x-model='conf.eth_hostname'>
+                    </td>
+                </tr>
+
                 <tr>
                     <td>
                         <label for='eth_use_dhcp'>
@@ -196,6 +182,16 @@
                     </td>
                 </tr>
 
+                <tr>
+                    <td>
+                        <label for='wifi_hostname'>
+                            Wi-Fi hostname:
+                        </label>
+                    </td>
+                    <td>
+                        <input type='text' id='wifi_hostname' x-model='conf.wifi_hostname'>
+                    </td>
+                </tr>
 
                 <tr>
                     <td>
@@ -265,10 +261,39 @@
             </table>
             <input type='submit' value='Submit'>
 
-            <p class="status_message" x-text='status_message'></p>
-
-
+            <template x-if="status_message">
+                <p class="status_message" x-text='status_message'></p>
+            </template>
         </form>
+
+
+        <h2>Network Status</h2>
+        <div x-data="network_status_data" x-init="fetch_update">
+            <template x-if="status">
+                <template x-for="key of Object.keys(status)">
+                    <div>
+                        <h3 x-text="`${key}`"></h3>
+                        <template x-if="typeof status[key] !== 'object' || status[key] === null">
+                            <span x-text="`${status[key]}`"></span>
+                        </template>
+                        <template x-if="typeof status[key] === 'object' && status[key] !== null">
+                            <table>
+                                <template x-for="key2 of Object.keys(status[key])">
+                                    <tr>
+                                        <td x-text="`${key2}:`"></td>
+                                        <td x-text="`${status[key][key2]}`"></td>
+                                    </tr>
+                                </template>
+                            </table>
+                        </template>
+                    </div>
+                </template>
+            </template>
+
+            <template x-if="status_message">
+                <p class="status_message" x-text='status_message'></p>
+            </template>
+        </div>
 
     </main>
 </body>

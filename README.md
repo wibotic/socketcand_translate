@@ -2,7 +2,7 @@
 
 This is a program that lets the [Olimex ESP32-EVB](https://www.olimex.com/Products/IoT/ESP32/ESP32-EVB/open-source-hardware)
 act as a [socketcand](https://github.com/linux-can/socketcand/) adapter.
-It runs a server that translates traffic between TCP socketcand clients and its CAN bus.
+It runs a server on port 29536 that translates traffic between TCP socketcand clients and its CAN bus.
 
 Clients can connect to the adapter via TCP socketcand
 to communicate with the CAN bus connected to the adapter.
@@ -12,7 +12,7 @@ Client1 <---TCP Socketcand---> |---------------------------|
                                | esp32_socketcand_adapter  |
 Client2 <---TCP Socketcand---> |        running on         |
                                |     Olimex ESP32-EVB      |
-Physical CAN bus (can0) <----> |---------------------------|
+Physical CAN bus (vcan0) <---> |---------------------------|
 ```
 
 Here's an image of an example setup:
@@ -49,7 +49,7 @@ Alternatively, you can build the project yourself.
 3. Run `idf.py flash` to flash your ESP32.
 
 
-## Usage
+## Setup
 
 1. On startup, your ESP32 will print its curent network settings over USB UART.
 Hold button `BUT1` for 1 second to reset the settings to default.
@@ -70,12 +70,24 @@ Change network settings to your liking.
 
 4. Connect the ESP32 to a CAN bus.
 
-5. Use a tool such as [socketcand](https://github.com/linux-can/socketcand)
-to connect to your ESP32's IP address.
-The ESP32 serves socketcand over port 29536.
+## Can-utils Candump Example
 
-6. You should be able to send and receive messages to the CAN bus
-connected to the ESP32.
+This example lets you listen to CAN packets from the ESP32 Socketcand Adapter. This example only works on Linux.
+
+1. Install can-utils. On Debian: `sudo apt install can-utils`.
+
+2. Install socketcand by following the instructions in
+the [socketcand](https://github.com/linux-can/socketcand) repository.
+
+3. Create a virtual CAN device: `sudo ip link add dev vcan0 type vcan`.
+
+4. Enable the virtual CAN device: `sudo ip link set up vcan0`.
+
+5. In the background, start `./socketcandcl -v --server [ESP32 IP ADDRESS] -i vcan0,vcan0`. Use the IP address of your ESP32. 
+
+6. Print incoming CAN packets with `candump vcan0`.
+
+## OpenCyphal Example
 
 If the CAN bus has [OpenCyphal](https://opencyphal.org/) nodes on it,
 you can interact with them using

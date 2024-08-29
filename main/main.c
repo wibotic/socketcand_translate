@@ -16,15 +16,16 @@ void app_main(void) {
   // Initialize the networking stack.
   ESP_ERROR_CHECK(esp_netif_init());
 
-  // Initialize nonvolatile memory storage
+  // Load persistent settings, or get defaults.
   ESP_ERROR_CHECK(persistent_settings_load());
 
   // Set up the long-press settings reset button
   ESP_ERROR_CHECK(persistent_settings_setup_reset_button());
 
-  // Print the settings over uart
-  ESP_LOGI(TAG, "Current settings:\n");
+  // Print the persistent settings over uart
+  ESP_LOGI(TAG, "Current settings:");
   esp_log_write(ESP_LOG_INFO, TAG, persistent_settings_json);
+  ESP_LOGI(TAG, "Hold button BUT1 for one second to reset settings to default.");
 
   // Start the CAN bus driver.
   twai_timing_config_t timing_config;
@@ -47,11 +48,13 @@ void app_main(void) {
   // start wifi driver
   if (persistent_settings->wifi_enabled) {
     if (persistent_settings->wifi_use_dhcp) {
-      err = driver_setup_wifi(NULL, persistent_settings->wifi_ssid,
+      err = driver_setup_wifi(NULL, persistent_settings->wifi_hostname,
+                              persistent_settings->wifi_ssid,
                               persistent_settings->wifi_pass);
 
     } else {
       err = driver_setup_wifi(&persistent_settings->wifi_ip_info,
+                              persistent_settings->wifi_hostname,
                               persistent_settings->wifi_ssid,
                               persistent_settings->wifi_pass);
     }
@@ -64,9 +67,10 @@ void app_main(void) {
 
   // start ethernet driver
   if (persistent_settings->eth_use_dhcp) {
-    err = driver_setup_ethernet(NULL);
+    err = driver_setup_ethernet(NULL, persistent_settings->eth_hostname);
   } else {
-    err = driver_setup_ethernet(&persistent_settings->eth_ip_info);
+    err = driver_setup_ethernet(&persistent_settings->eth_ip_info,
+                                persistent_settings->eth_hostname);
   }
 
   if (err != ESP_OK) {
@@ -89,7 +93,8 @@ void app_main(void) {
   // Log network status:
   vTaskDelay(pdMS_TO_TICKS(10000));
   const char* json_status;
-  err = status_report_get(&json_status, driver_setup_eth_netif, driver_setup_wifi_netif);
+  err = status_report_get(&json_status, driver_setup_eth_netif,
+                          driver_setup_wifi_netif);
   if (err == ESP_OK) {
     ESP_LOGI(TAG, "Network status after startup:");
     esp_log_write(ESP_LOG_INFO, TAG, json_status);

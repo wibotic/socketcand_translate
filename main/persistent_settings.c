@@ -21,6 +21,7 @@ static char persistent_settings_json_data[1024];
 static void button_handler(void *button_handle, void *usr_data);
 
 const persistent_settings_t persistent_settings_default = {
+    .eth_hostname = "socketcand-eth",
     .eth_use_dhcp = false,
     .eth_ip_info.ip.addr = ESP_IP4TOADDR(192, 168, 2, 163),
     .eth_ip_info.netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0),
@@ -28,6 +29,7 @@ const persistent_settings_t persistent_settings_default = {
     .wifi_enabled = false,
     .wifi_ssid = "ssid_changeme",
     .wifi_pass = "password_changeme",
+    .wifi_hostname = "socketcand-wifi",
     .wifi_use_dhcp = true,
     .wifi_ip_info.ip.addr = ESP_IP4TOADDR(192, 168, 2, 163),
     .wifi_ip_info.netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0),
@@ -79,6 +81,7 @@ esp_err_t persistent_settings_load() {
                      &config_size);
 
   if (err == ESP_ERR_NVS_NOT_FOUND) {
+    ESP_LOGW(TAG, "No saved settings detected, so using defaults.");
     persistent_settings_data = persistent_settings_default;
   } else {
     ESP_RETURN_ON_ERROR(err, TAG, "Couldn't read value from NVS.");
@@ -92,6 +95,10 @@ esp_err_t persistent_settings_load() {
   int bytes_written = snprintf(
       persistent_settings_json_data, sizeof(persistent_settings_json_data),
       "{\n"
+
+      "\"eth_hostname\": "
+      "\"%s\",\n"
+
       "\"eth_use_dhcp\": "
       "%s,\n"
 
@@ -116,6 +123,9 @@ esp_err_t persistent_settings_load() {
       "\"wifi_pass\": "
       "\"******\",\n"
 
+      "\"wifi_hostname\": "
+      "\"%s\",\n"
+
       "\"wifi_use_dhcp\": "
       "%s,\n"
 
@@ -135,6 +145,7 @@ esp_err_t persistent_settings_load() {
       "%d\n"
 
       "}\n",
+      persistent_settings->eth_hostname,
       persistent_settings->eth_use_dhcp ? "true" : "false",
       IP2STR(&persistent_settings->eth_ip_info.ip),
       IP2STR(&persistent_settings->eth_ip_info.netmask),
@@ -142,6 +153,7 @@ esp_err_t persistent_settings_load() {
       persistent_settings->wifi_enabled ? "true" : "false",
       persistent_settings->wifi_ssid,
       // current_config.wifi_pass,
+      persistent_settings->wifi_hostname,
       persistent_settings->wifi_use_dhcp ? "true" : "false",
       IP2STR(&persistent_settings->wifi_ip_info.ip),
       IP2STR(&persistent_settings->wifi_ip_info.netmask),

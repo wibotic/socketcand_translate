@@ -48,7 +48,8 @@ static void can_recovery_task(void *pvParameters);
 static StackType_t can_recovery_task_stack[4096];
 static StaticTask_t can_recovery_task_mem;
 
-esp_err_t driver_setup_ethernet(const esp_netif_ip_info_t *ip_info) {
+esp_err_t driver_setup_ethernet(const esp_netif_ip_info_t *ip_info,
+                                const char *hostname) {
   esp_err_t err;
   // Based on:
   // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_eth.html
@@ -98,6 +99,10 @@ esp_err_t driver_setup_ethernet(const esp_netif_ip_info_t *ip_info) {
     return ESP_FAIL;
   }
 
+  //// Set the device hostname ////
+  err = esp_netif_set_hostname(esp_netif, hostname);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set ethernet hostname.");
+
   //// Set static IP info if needed ////
   if (ip_info != NULL) {
     err = esp_netif_dhcpc_stop(esp_netif);
@@ -130,6 +135,7 @@ esp_err_t driver_setup_ethernet(const esp_netif_ip_info_t *ip_info) {
 
   /// Wait for internet to actually work ////
   if (xSemaphoreTake(internet_ready, pdMS_TO_TICKS(10000)) == pdFALSE) {
+    vSemaphoreDelete(internet_ready);
     ESP_LOGE(TAG, "Couldn't start ethernet driver in 10 seconds.");
     return ESP_FAIL;
   }
@@ -140,7 +146,8 @@ esp_err_t driver_setup_ethernet(const esp_netif_ip_info_t *ip_info) {
 }
 
 esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info,
-                            const char ssid[32], const char password[64]) {
+                            const char *hostname, const char ssid[32],
+                            const char password[64]) {
   esp_err_t err;
   // Check if the ethernet driver has already been started
   if (driver_setup_wifi_netif != NULL) {
@@ -155,19 +162,23 @@ esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info,
     return ESP_FAIL;
   }
 
+  //// Set the device hostname ////
+  err = esp_netif_set_hostname(esp_netif, hostname);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set Wi-Fi hostname.");
+
   //// Set static IP info if needed ////
   if (ip_info != NULL) {
     err = esp_netif_dhcpc_stop(esp_netif);
     ESP_RETURN_ON_ERROR(err, TAG,
                         "Couldn't stop WIFI dhcp to set up static IP.");
     err = esp_netif_set_ip_info(esp_netif, ip_info);
-    ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set IP info for WIFI.");
+    ESP_RETURN_ON_ERROR(err, TAG, "Couldn't set IP info for Wi-Fi.");
   }
 
   //// Initialize the wifi driver ////
   wifi_init_config_t wifi_init_config = WIFI_INIT_CONFIG_DEFAULT();
   err = esp_wifi_init(&wifi_init_config);
-  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't initialize WIFI");
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't initialize Wi-Fi");
 
   /// Configure the wifi driver ////
   wifi_config_t wifi_config = {0};
@@ -190,17 +201,19 @@ esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info,
                                    &ip_event_handler, NULL);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't register IP handler.");
 
+  err = esp_wifi_start();
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't start Wi-Fi.");
+
   // Tell the driver to try connecting to WIFI.
   // Note: This will NOT return an error if WIFI can't connect.
   // All reconnection logic is instead handled by
   // `wifi_recovery_task()`.
-  err = esp_wifi_start();
-  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't start WIFI.");
   err = esp_wifi_connect();
-  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't connect to WIFI.");
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't connect to Wi-Fi.");
 
   //// Wait for internet to actually work ////
   if (xSemaphoreTake(internet_ready, pdMS_TO_TICKS(10000)) == pdFALSE) {
+    vSemaphoreDelete(internet_ready);
     ESP_LOGE(TAG, "Couldn't start WIFI driver in 10 seconds.");
     return ESP_FAIL;
   }
@@ -275,7 +288,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data) {
   switch (event_id) {
     case WIFI_EVENT_STA_START:
-      ESP_LOGD(TAG, "WIFI station started.");
+      ESP_LOGD(TAG, "WIFI station started. Connecting...");
+      esp_wifi_connect();
       xSemaphoreGive(internet_ready);
       break;
     case WIFI_EVENT_STA_CONNECTED:
@@ -312,8 +326,8 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base,
 static void wifi_recovery_task(void *pvParameters) {
   // Constantly re-connect to Wi-Fi if needed.
   while (true) {
-    // Check Wi-Fi status every 5 seconds
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    // Check Wi-Fi status every 10 seconds
+    vTaskDelay(pdMS_TO_TICKS(10000));
     if (!esp_netif_is_netif_up(driver_setup_wifi_netif)) {
       ESP_LOGE(TAG, "Retrying connecting to Wi-Fi.");
       esp_err_t err = esp_wifi_connect();
@@ -322,7 +336,7 @@ static void wifi_recovery_task(void *pvParameters) {
                  esp_err_to_name(err));
       }
       // Wait 20 seconds after re-connection attempt before trying again
-      vTaskDelay(pdMS_TO_TICKS(15000));
+      vTaskDelay(pdMS_TO_TICKS(10000));
     }
   }
 }

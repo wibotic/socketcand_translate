@@ -18,6 +18,9 @@ enum can_bitrate_setting {
 
 // Persistent settings for this socketcand adapter.
 typedef struct {
+  // Ethernet hostname
+  char eth_hostname[256];
+
   // Should ethernet use DHCP instead of static IP?
   bool eth_use_dhcp;
 
@@ -32,6 +35,9 @@ typedef struct {
 
   // WIFI password
   char wifi_pass[64];
+
+  // WIFI hostname
+  char wifi_hostname[256];
 
   // Should WIFI use DHCP instead of static IP?
   bool wifi_use_dhcp;

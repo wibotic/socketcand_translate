@@ -189,7 +189,7 @@ esp_err_t socketcand_server_start(uint16_t port) {
   server_status_mutex = xSemaphoreCreateMutexStatic(&server_status_mutex_mem);
   if (server_status_mutex == NULL) {
     ESP_LOGE(TAG, "Unreachable. server_status_mutex couldn't be created.");
-    abort();
+    return ESP_FAIL;
   }
 
   // Initialize `client_handler_datas`.
@@ -201,7 +201,7 @@ esp_err_t socketcand_server_start(uint16_t port) {
 
     if (client_handler_datas[i].can_rx_queue == NULL) {
       ESP_LOGE(TAG, "Unreachable. A can_rx_queue couldn't be created.");
-      abort();
+      return ESP_FAIL;
     }
 
     client_handler_datas[i].tcp_messenger.socket_fd = -1;
@@ -212,7 +212,7 @@ esp_err_t socketcand_server_start(uint16_t port) {
     if (client_handler_datas[i].handler_task_delete_mutex == NULL) {
       ESP_LOGE(TAG,
                "Unreachable. A handler_task_delete_mutex couldn't be created.");
-      abort();
+      return ESP_FAIL;
     }
   }
 
@@ -226,7 +226,7 @@ esp_err_t socketcand_server_start(uint16_t port) {
     ESP_LOGE(
         TAG,
         "Unreachable. unused_client_handler_data_queue couldn't be created.");
-    abort();
+    return ESP_FAIL;
   }
 
   for (int i = 0; i < MAX_CLIENTS; i++) {
@@ -237,7 +237,7 @@ esp_err_t socketcand_server_start(uint16_t port) {
       ESP_LOGE(TAG,
                "Unreachable. unused_client_handler_data_queue should have "
                "MAX_CLIENT slots.");
-      abort();
+      return ESP_FAIL;
     }
   }
 
