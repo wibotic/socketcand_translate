@@ -20,22 +20,33 @@ Here's an image of an example setup:
 ![Example ESP32 Socketcand Translate Setup](socketcand_adapter_labeled.jpg)
 
 ## Installation
-The *Releases* page contains pre-built `esp32_socketcand_adapter.bin` files.
-To flash them onto your ESP32 using
-[Esptool](https://docs.espressif.com/projects/esptool/en/latest/esp32/), run this command:
 
-```bash
-esptool.py write_flash 0 esp32_socketcand_adapter.bin
-```
+1. Install [Esptool](https://docs.espressif.com/projects/esptool/en/latest/esp32/)
+by running:
+    ```
+    python -m pip install esptool
+    ```
 
-To monitor log output from the ESP32 on Linux, run: \
-(replace "/dev/ttyUSB0" with the port you're using)
+2. Download the latest `esp32_socketcand_adapter.bin` file from the
+[Releases](https://github.com/wibotic/socketcand_translate/releases) page.
 
-```bash
-tail -f /dev/ttyUSB0
-```
+3. Connect an [Olimex ESP32-EVB](https://www.olimex.com/Products/IoT/ESP32/ESP32-EVB/open-source-hardware)
+to your computer with a micro USB cable.
 
-Note: Flashing will fail if the port is being monitored.
+4. Flash your ESP32 by running
+    ```
+    python -m esptool write_flash 0 esp32_socketcand_adapter.bin
+    ```
+
+5. Optionally, monitor log output on Linux by running:
+
+    ```bash
+    tail -f /dev/ttyUSB0
+    ```
+    Replace */dev/ttyUSB0* with the port you're using.
+    Run `lsusb` to get a list of USB ports.
+    
+    Note: Flashing will fail if the port is being monitored.
 
 ## Build from source
 Alternatively, you can build the project yourself.

@@ -308,22 +308,22 @@ static esp_err_t print_socketcand_status(char *buf_out, size_t buflen,
                "{\n"
 
                "\"Total socketcand frames received over TCP\": "
-               "\"%lld\",\n"
+               "%lld,\n"
 
                "\"Total invalid socketcand frames received over TCP\": "
-               "\"%lld\",\n"
+               "%lld,\n"
 
                "\"Total frames transmitted to CAN bus\": "
-               "\"%lld\",\n"
+               "%lld,\n"
 
                "\"Total CAN transmit fails\": "
-               "\"%lld\",\n"
+               "%lld,\n"
 
                "\"Total frames received from CAN bus\": "
-               "\"%lld\",\n"
+               "%lld,\n"
 
                "\"Total socketcand frames sent over TCP\": "
-               "\"%lld\"\n"
+               "%lld\n"
 
                "}",
                status.socketcand_frames_received,

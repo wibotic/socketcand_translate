@@ -80,11 +80,11 @@ esp_err_t persistent_settings_load() {
   err = nvs_get_blob(nvs_handle, "config", &persistent_settings_data,
                      &config_size);
 
-  if (err == ESP_ERR_NVS_NOT_FOUND) {
-    ESP_LOGW(TAG, "No saved settings detected, so using defaults.");
+  if (err != ESP_OK) {
+    ESP_LOGW(TAG, "Couldn't load persistent settings: %s",
+             esp_err_to_name(err));
+    ESP_LOGW(TAG, "Using default settings instead.");
     persistent_settings_data = persistent_settings_default;
-  } else {
-    ESP_RETURN_ON_ERROR(err, TAG, "Couldn't read value from NVS.");
   }
 
   nvs_close(nvs_handle);
