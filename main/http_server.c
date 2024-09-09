@@ -90,8 +90,6 @@ static const httpd_uri_t post_api_config_handler = {
     .user_ctx = NULL};
 
 // Updates `settings_to_update` with any updated values from `json`.
-// `tmp_arg_buf` is a buffer temporarily used by this function.
-// Returns `ESP_ERR_INVALID_ARG` if `arg_buf_size` is under 64 bytes.
 // On success, `settings_to_update` will hold the updated settings.
 // On failure, returns an error.
 static esp_err_t update_persistent_settings_from_json(
