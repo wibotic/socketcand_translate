@@ -91,12 +91,11 @@ static const httpd_uri_t post_api_config_handler = {
 
 // Updates `settings_to_update` with any updated values from `json`.
 // `tmp_arg_buf` is a buffer temporarily used by this function.
-// An error may be returned if `arg_buf_size` is under 256 bytes.
+// Returns `ESP_ERR_INVALID_ARG` if `arg_buf_size` is under 64 bytes.
 // On success, `settings_to_update` will hold the updated settings.
 // On failure, returns an error.
 static esp_err_t update_persistent_settings_from_json(
-    const char *json, char *tmp_arg_buf, size_t arg_buf_size,
-    persistent_settings_t *settings_to_update);
+    const char *json, persistent_settings_t *settings_to_update);
 
 esp_err_t start_http_server(void) {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -157,7 +156,6 @@ static esp_err_t serve_get_api_status(httpd_req_t *req) {
 // Temporarily stores the body of
 // the request in `serve_post_api_config()`.
 static char shared_post_buf[2048];
-static char shared_tmp_arg_buf[256];
 SemaphoreHandle_t post_buf_mutex = NULL;
 StaticSemaphore_t post_buf_mutex_mem;
 
@@ -192,8 +190,7 @@ static esp_err_t serve_post_api_config(httpd_req_t *req) {
   // Parse the posted JSON
   persistent_settings_t new_persistent_settings = *persistent_settings;
   esp_err_t err = update_persistent_settings_from_json(
-      shared_post_buf, shared_tmp_arg_buf, sizeof(shared_tmp_arg_buf),
-      &new_persistent_settings);
+      shared_post_buf, &new_persistent_settings);
 
   assert(xSemaphoreGive(post_buf_mutex) == pdTRUE);
 
@@ -227,11 +224,15 @@ static esp_err_t serve_post_api_config(httpd_req_t *req) {
 }
 
 static esp_err_t update_persistent_settings_from_json(
-    const char *json, char *tmp_arg_buf, size_t arg_buf_size,
-    persistent_settings_t *settings_to_update) {
+    const char *json, persistent_settings_t *settings_to_update) {
   // rebind for brevity
   persistent_settings_t *cnf = settings_to_update;
-  char *arg_buf = tmp_arg_buf;
+
+  // Temporary buffer for reading the http query values.
+  // `wifi_pass` is the largest field in `persistent_settings_t`,
+  // and its length is 64.
+  char arg_buf[64];
+
   esp_err_t err;
 
   // read hostname field
@@ -244,7 +245,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read eth_use_dhcp field
-  err = httpd_query_key_value(json, "eth_use_dhcp", arg_buf, arg_buf_size);
+  err = httpd_query_key_value(json, "eth_use_dhcp", arg_buf, sizeof(arg_buf));
   if (err == ESP_OK) {
     if (strncasecmp(arg_buf, "true", 4) == 0)
       cnf->eth_use_dhcp = true;
@@ -255,7 +256,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read eth_ip field
-  err = httpd_query_key_value(json, "eth_ip", arg_buf, arg_buf_size);
+  err = httpd_query_key_value(json, "eth_ip", arg_buf, sizeof(arg_buf));
   if (err == ESP_OK) {
     err = esp_netif_str_to_ip4(arg_buf, &cnf->eth_ip_info.ip);
     if (err != ESP_OK) {
@@ -266,7 +267,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read eth_netmask field
-  err = httpd_query_key_value(json, "eth_netmask", arg_buf, arg_buf_size);
+  err = httpd_query_key_value(json, "eth_netmask", arg_buf, sizeof(arg_buf));
   if (err == ESP_OK) {
     err = esp_netif_str_to_ip4(arg_buf, &cnf->eth_ip_info.netmask);
     if (err != ESP_OK) {
@@ -277,7 +278,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read eth_gw field
-  err = httpd_query_key_value(json, "eth_gw", arg_buf, arg_buf_size);
+  err = httpd_query_key_value(json, "eth_gw", arg_buf, sizeof(arg_buf));
   if (err == ESP_OK) {
     err = esp_netif_str_to_ip4(arg_buf, &cnf->eth_ip_info.gw);
     if (err != ESP_OK) {
@@ -288,7 +289,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read wifi_enabled field
-  err = httpd_query_key_value(json, "wifi_enabled", arg_buf, arg_buf_size);
+  err = httpd_query_key_value(json, "wifi_enabled", arg_buf, sizeof(arg_buf));
   if (err == ESP_OK) {
     if (strncasecmp(arg_buf, "true", 4) == 0)
       cnf->wifi_enabled = true;
@@ -319,7 +320,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read wifi_use_dhcp field
-  err = httpd_query_key_value(json, "wifi_use_dhcp", arg_buf, arg_buf_size);
+  err = httpd_query_key_value(json, "wifi_use_dhcp", arg_buf, sizeof(arg_buf));
   if (err == ESP_OK) {
     if (strncasecmp(arg_buf, "true", 4) == 0)
       cnf->wifi_use_dhcp = true;
@@ -330,7 +331,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read wifi_ip field
-  err = httpd_query_key_value(json, "wifi_ip", arg_buf, arg_buf_size);
+  err = httpd_query_key_value(json, "wifi_ip", arg_buf, sizeof(arg_buf));
   if (err == ESP_OK) {
     err = esp_netif_str_to_ip4(arg_buf, &cnf->wifi_ip_info.ip);
     if (err != ESP_OK) {
@@ -341,7 +342,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read wifi_netmask field
-  err = httpd_query_key_value(json, "wifi_netmask", arg_buf, arg_buf_size);
+  err = httpd_query_key_value(json, "wifi_netmask", arg_buf, sizeof(arg_buf));
   if (err == ESP_OK) {
     err = esp_netif_str_to_ip4(arg_buf, &cnf->wifi_ip_info.netmask);
     if (err != ESP_OK) {
@@ -352,7 +353,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read wifi_gw field
-  err = httpd_query_key_value(json, "wifi_gw", arg_buf, arg_buf_size);
+  err = httpd_query_key_value(json, "wifi_gw", arg_buf, sizeof(arg_buf));
   if (err == ESP_OK) {
     err = esp_netif_str_to_ip4(arg_buf, &cnf->wifi_ip_info.gw);
     if (err != ESP_OK) {
@@ -363,7 +364,7 @@ static esp_err_t update_persistent_settings_from_json(
   }
 
   // read can_bitrate field
-  err = httpd_query_key_value(json, "can_bitrate", arg_buf, arg_buf_size);
+  err = httpd_query_key_value(json, "can_bitrate", arg_buf, sizeof(arg_buf));
   if (err == ESP_OK) {
     uint32_t num = strtol(arg_buf, NULL, 10);
 

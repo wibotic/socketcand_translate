@@ -269,7 +269,7 @@ static esp_err_t print_can_status(char *buf_out, size_t buflen,
       "\"Total number of failed message transmissions\": "
       "%ld,\n"
 
-      "\"Total number of failed message receptions\": "
+      "\"Total number of missed message receptions\": "
       "%ld,\n"
 
       "\"Total number of incoming messages lost due to FIFO overrun\": "

@@ -32,25 +32,7 @@ void app_main(void) {
       TAG,
       "Hold button BUT1 for one second to reset these settings to default.");
 
-  // Get the CAN bus timing configuration
-  twai_timing_config_t timing_config;
-  esp_err_t err = persistent_settings_get_timing_config(
-      persistent_settings->can_bitrate, &timing_config);
-
-  if (err != ESP_OK) {
-    ESP_LOGE(
-        TAG,
-        "Invalid CAN bitrate in settings. Resetting settings to defaults.");
-    ESP_ERROR_CHECK(persistent_settings_save(&persistent_settings_default));
-  }
-
-  // Set up the CAN bus driver.
-  err = driver_setup_can(&timing_config);
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "CRITICAL: Couldn't start CAN driver: %s",
-             esp_err_to_name(err));
-  }
-
+  esp_err_t err;
   const esp_netif_ip_info_t* ip_info_setting;
 
   // start wifi driver if enabled
@@ -84,11 +66,29 @@ void app_main(void) {
   }
 
   // Start ethernet driver
-  err =
-      driver_setup_ethernet(ip_info_setting, persistent_settings->hostname);
+  err = driver_setup_ethernet(ip_info_setting, persistent_settings->hostname);
 
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "CRITICAL: Couldn't start ethernet driver: %s",
+             esp_err_to_name(err));
+  }
+
+  // Get the CAN bus timing configuration
+  twai_timing_config_t timing_config;
+  err = persistent_settings_get_timing_config(persistent_settings->can_bitrate,
+                                              &timing_config);
+
+  if (err != ESP_OK) {
+    ESP_LOGE(
+        TAG,
+        "Invalid CAN bitrate in settings. Resetting settings to defaults.");
+    ESP_ERROR_CHECK(persistent_settings_save(&persistent_settings_default));
+  }
+
+  // Set up the CAN bus driver.
+  err = driver_setup_can(&timing_config);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "CRITICAL: Couldn't start CAN driver: %s",
              esp_err_to_name(err));
   }
 

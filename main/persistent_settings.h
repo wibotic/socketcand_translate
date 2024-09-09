@@ -18,8 +18,9 @@ enum can_bitrate_setting {
 
 // Persistent settings for this socketcand adapter.
 typedef struct {
-  // Device hostname
-  char hostname[256];
+  // Device hostname.
+  // Length 32 based on `esp_netif_set_hostname()` documentation.
+  char hostname[32];
 
   // Should ethernet use DHCP instead of static IP?
   bool eth_use_dhcp;
