@@ -126,6 +126,11 @@ esp_err_t driver_setup_ethernet(const esp_netif_ip_info_t *ip_info,
   esp_eth_netif_glue_handle_t eth_netif_glue =
       esp_eth_new_netif_glue(eth_handle);
 
+  if (eth_netif_glue == NULL) {
+    ESP_LOGE(TAG, "Couldn't create eth netif glue");
+    return ESP_FAIL;
+  }
+
   err = esp_netif_attach(esp_netif, eth_netif_glue);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't attach ethernet to ESP netif.");
 
@@ -134,7 +139,7 @@ esp_err_t driver_setup_ethernet(const esp_netif_ip_info_t *ip_info,
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't start ethernet.");
 
   /// Wait for internet to actually work ////
-  if (xSemaphoreTake(internet_ready, pdMS_TO_TICKS(10000)) == pdFALSE) {
+  if (xSemaphoreTake(internet_ready, pdMS_TO_TICKS(10000)) != pdTRUE) {
     vSemaphoreDelete(internet_ready);
     ESP_LOGE(TAG, "Couldn't start ethernet driver in 10 seconds.");
     return ESP_FAIL;
@@ -212,7 +217,7 @@ esp_err_t driver_setup_wifi(const esp_netif_ip_info_t *ip_info,
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't connect to Wi-Fi.");
 
   //// Wait for internet to actually work ////
-  if (xSemaphoreTake(internet_ready, pdMS_TO_TICKS(10000)) == pdFALSE) {
+  if (xSemaphoreTake(internet_ready, pdMS_TO_TICKS(10000)) != pdTRUE) {
     vSemaphoreDelete(internet_ready);
     ESP_LOGE(TAG, "Couldn't start WIFI driver in 10 seconds.");
     return ESP_FAIL;
@@ -236,8 +241,8 @@ esp_err_t driver_setup_can(const twai_timing_config_t *timing_config) {
   // Change this line to enable/disable logging:
   g_config.alerts_enabled = TWAI_ALERT_AND_LOG | TWAI_ALERT_ABOVE_ERR_WARN |
                             TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED;
-  g_config.tx_queue_len = 64;
-  g_config.rx_queue_len = 64;
+  g_config.tx_queue_len = 32;
+  g_config.rx_queue_len = 32;
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
   // Install TWAI driver
@@ -273,7 +278,7 @@ static void ethernet_event_handler(void *arg, esp_event_base_t event_base,
       break;
     case ETHERNET_EVENT_START:
       ESP_LOGD(TAG, "Ethernet Started");
-      xSemaphoreGive(internet_ready);
+      assert(xSemaphoreGive(internet_ready) == pdTRUE);
       break;
     case ETHERNET_EVENT_STOP:
       ESP_LOGE(TAG, "Ethernet Stopped");
@@ -290,7 +295,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     case WIFI_EVENT_STA_START:
       ESP_LOGD(TAG, "WIFI station started. Connecting...");
       esp_wifi_connect();
-      xSemaphoreGive(internet_ready);
+      assert(xSemaphoreGive(internet_ready) == pdTRUE);
       break;
     case WIFI_EVENT_STA_CONNECTED:
       ESP_LOGD(TAG, "WIFI station connected.");

@@ -76,6 +76,7 @@ const network_settings_data = {
 
         // Post the settings
         try {
+            this.status_message = "Sending updated settings to ESP32...";
             const response = await fetch('/api/config', {
                 method: 'POST',
                 body: new URLSearchParams(post_obj),

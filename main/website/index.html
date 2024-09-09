@@ -39,6 +39,7 @@
         table {
             border-collapse: collapse;
             box-shadow: 0 0 5px 0px #727272;
+            margin: 5px;
         }
 
         td {
@@ -95,12 +96,12 @@
             <table>
                 <tr>
                     <td>
-                        <label for='eth_hostname'>
-                            Ethernet hostname:
+                        <label for='hostname'>
+                            Device hostname:
                         </label>
                     </td>
                     <td>
-                        <input type='text' id='eth_hostname' x-model='conf.eth_hostname'>
+                        <input type='text' id='hostname' x-model='conf.hostname'>
                     </td>
                 </tr>
 
@@ -179,17 +180,6 @@
                     </td>
                     <td>
                         <input type='password' id='wifi_pass' x-model='conf.wifi_pass'>
-                    </td>
-                </tr>
-
-                <tr>
-                    <td>
-                        <label for='wifi_hostname'>
-                            Wi-Fi hostname:
-                        </label>
-                    </td>
-                    <td>
-                        <input type='text' id='wifi_hostname' x-model='conf.wifi_hostname'>
                     </td>
                 </tr>
 
