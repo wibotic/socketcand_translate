@@ -13,11 +13,11 @@
 // this function will block if another task is also
 // currently reading the status.
 // Once the caller is done reading the string,
-// they must call `driver_setup_release_json_status()` to
+// they must call `status_report_release()` to
 // allow other callers to access the status.
 esp_err_t status_report_get(const char** json_out, esp_netif_t* eth_netif,
                             esp_netif_t* wifi_netif);
 
 // Must be called once finished reading the buffer
-// returned by `driver_setup_get_status_json()`.
+// returned by `status_report_get()`.
 esp_err_t status_report_release(void);

@@ -248,7 +248,30 @@
                     </td>
                 </tr>
 
+                <tr>
+                    <td>
+                        <label for='enable_cyphal'>
+                            Enable Cyphal Node:
+                        </label>
+                    </td>
+                    <td>
+                        <input type='checkbox' id='enable_cyphal' x-model='conf.enable_cyphal'>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <label for='cyphal_node_id'>
+                            Cyphal Node ID (if enabled):
+                        </label>
+                    </td>
+                    <td>
+                        <input type='number' min='0' max='127' id='cyphal_node_id' x-model='conf.cyphal_node_id'>
+                    </td>
+                </tr>
+
             </table>
+
             <input type='submit' value='Submit'>
 
             <template x-if="status_message">

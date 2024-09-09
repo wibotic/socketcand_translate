@@ -9,6 +9,8 @@ idf_component_register(
         "persistent_settings.c"
         "discovery_beacon.c"
         "status_report.c"
+        "cyphal_node.c"
+        "can_listener.c"
         INCLUDE_DIRS "."
         EMBED_FILES
         website/index.html
@@ -16,3 +18,5 @@ idf_component_register(
         website/script.js
         website/alpine.js
 )
+
+target_compile_options(${COMPONENT_LIB} PRIVATE -Werror -Wextra -Wshadow -Wmissing-field-initializers -fanalyzer)

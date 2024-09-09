@@ -46,6 +46,12 @@ typedef struct {
   // Bitrate of CAN interface
   enum can_bitrate_setting can_bitrate;
 
+  // OpenCyphal node enabled?
+  bool enable_cyphal;
+
+  // ID of Cyphal Node if enabled.
+  uint8_t cyphal_node_id;
+
 } persistent_settings_t;
 
 // Default `persistent_settings_t`.
@@ -63,6 +69,8 @@ static const persistent_settings_t persistent_settings_default = {
     .wifi_ip_info.netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0),
     .wifi_ip_info.gw.addr = ESP_IP4TOADDR(192, 168, 2, 1),
     .can_bitrate = CAN_KBITS_500,
+    .enable_cyphal = false,
+    .cyphal_node_id = 98,
 };
 
 // Pointer to the current persistent settings.

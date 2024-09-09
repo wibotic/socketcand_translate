@@ -8,6 +8,7 @@
 static const char* TAG = "discovery_beacon";
 
 // Task that broadcasts the beacon.
+// pvParameters should be ther local socket fd.
 static void discovery_beacon_task(void* pvParameters);
 static StackType_t task_stack[4096];
 static StaticTask_t task_mem;
@@ -54,9 +55,10 @@ static void discovery_beacon_task(void* pvParameters) {
     vTaskDelay(pdMS_TO_TICKS(2000));
 
     int bytes_printed = 0;
-    int res = snprintf(msg_buf + bytes_printed, sizeof(msg_buf) - bytes_printed,
-                       "<CANBeacon name='esp32_socketcand_adapter' type='adapter' "
-                       "description='socketcand running on ESP32-EVB Olimex'>\n");
+    int res =
+        snprintf(msg_buf + bytes_printed, sizeof(msg_buf) - bytes_printed,
+                 "<CANBeacon name='esp32_socketcand_adapter' type='adapter'\n"
+                 "description='socketcand running on ESP32-EVB Olimex'>\n");
     bytes_printed += res;
     if (res < 0 || bytes_printed >= sizeof(msg_buf)) {
       ESP_LOGE(TAG, "Couldn't snprintf CAN beacon message.");
@@ -66,7 +68,11 @@ static void discovery_beacon_task(void* pvParameters) {
     if (driver_setup_eth_netif != NULL &&
         esp_netif_is_netif_up(driver_setup_eth_netif)) {
       esp_netif_ip_info_t ip_info;
-      ESP_ERROR_CHECK(esp_netif_get_ip_info(driver_setup_eth_netif, &ip_info));
+      esp_err_t err = esp_netif_get_ip_info(driver_setup_eth_netif, &ip_info);
+      if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Discovery beacon task couldn't get ethernet IP info.");
+        continue;
+      }
 
       res =
           snprintf(msg_buf + bytes_printed, sizeof(msg_buf) - bytes_printed,
@@ -81,7 +87,11 @@ static void discovery_beacon_task(void* pvParameters) {
     if (driver_setup_wifi_netif != NULL &&
         esp_netif_is_netif_up(driver_setup_wifi_netif)) {
       esp_netif_ip_info_t ip_info;
-      ESP_ERROR_CHECK(esp_netif_get_ip_info(driver_setup_wifi_netif, &ip_info));
+      esp_err_t err = esp_netif_get_ip_info(driver_setup_wifi_netif, &ip_info);
+      if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Discovery beacon task couldn't get Wi-Fi IP info.");
+        continue;
+      }
 
       res =
           snprintf(msg_buf + bytes_printed, sizeof(msg_buf) - bytes_printed,

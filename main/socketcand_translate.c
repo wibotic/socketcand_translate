@@ -10,10 +10,10 @@ static const char *TAG = "socketcand_server";
 #define CAN_SHORT_ID_MASK 0x000007FFU
 
 esp_err_t socketcand_translate_frame_to_string(
-    char *buf, size_t bufsize, const socketcand_translate_frame_t *can_frame,
+    char *buf, size_t bufsize, const twai_message_t *can_frame,
     uint32_t secs, uint32_t usecs) {
   // Can't write more than 8 bytes to classic CAN payload
-  if (can_frame->len > 8) {
+  if (can_frame->data_length_code > 8) {
     ESP_LOGE(TAG, "Can't write more than 8 bytes in classic CAN payload.");
     return ESP_ERR_NO_MEM;
   }
@@ -21,7 +21,7 @@ esp_err_t socketcand_translate_frame_to_string(
   int written = 0;
 
   int res = snprintf(buf + written, bufsize - written, "< frame %lX %ld.%ld ",
-                     can_frame->id, secs, usecs);
+                     can_frame->identifier, secs, usecs);
   written += res;
 
   if (res < 0 || written >= bufsize) {
@@ -29,7 +29,7 @@ esp_err_t socketcand_translate_frame_to_string(
   }
 
   // Convert each byte to hex
-  for (int i = 0; i < can_frame->len; i++) {
+  for (int i = 0; i < can_frame->data_length_code; i++) {
     res =
         snprintf(buf + written, bufsize - written, "%02X", can_frame->data[i]);
     written += res;
@@ -49,7 +49,15 @@ esp_err_t socketcand_translate_frame_to_string(
 }
 
 esp_err_t socketcand_translate_string_to_frame(
-    const char *buf, socketcand_translate_frame_t *msg) {
+    const char *buf, twai_message_t *msg) {
+  
+  // Set unused fields to zero
+  msg->rtr = 0;
+  msg->ss = 0;
+  msg->self = 0;
+  msg->dlc_non_comp = 0;
+  msg->reserved = 0;
+
   // if this frame isn't a send frame
   if (strncmp("< send ", buf, 7 != 0)) {
     ESP_LOGE(TAG, "Invalid syntax in received socketcand frame.");
@@ -58,17 +66,20 @@ esp_err_t socketcand_translate_string_to_frame(
 
   int count =
       sscanf(buf, "< send %lx %hhu %hhx %hhx %hhx %hhx %hhx %hhx %hhx %hhx >",
-             &(msg->id), &(msg->len), &msg->data[0], &msg->data[1],
+             &(msg->identifier), &(msg->data_length_code), &msg->data[0], &msg->data[1],
              &msg->data[2], &msg->data[3], &msg->data[4], &msg->data[5],
              &msg->data[6], &msg->data[7]);
 
-  if ((count < 2) || (msg->len > 8) || (count != 2 + msg->len)) {
+  // Validate the frame syntax.
+  if ((count < 2) || (msg->data_length_code > 8) || (count != 2 + msg->data_length_code)) {
     ESP_LOGE(TAG, "Invalid syntax in received socketcand frame.");
+    return ESP_FAIL;
   }
-  if (msg->id > CAN_SHORT_ID_MASK) {
-    msg->ext = 1;
+
+  if (msg->identifier > CAN_SHORT_ID_MASK) {
+    msg->extd = 1;
   } else {
-    msg->ext = 0;
+    msg->extd = 0;
   }
 
   return ESP_OK;

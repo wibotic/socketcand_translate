@@ -5,6 +5,8 @@
 #include "persistent_settings.h"
 #include "socketcand_server.h"
 #include "status_report.h"
+#include "can_listener.h"
+#include "cyphal_node.h"
 
 // Name that will be used for logging
 static const char* TAG = "main";
@@ -92,6 +94,14 @@ void app_main(void) {
              esp_err_to_name(err));
   }
 
+  // Start the task that will listen for incoming CAN messages.
+  // Requried for the socketcand server to run.
+  err = can_listener_start();
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "CRITICAL: Couldn't start CAN listener: %s",
+             esp_err_to_name(err));
+  }
+
   // start HTTP server used for configuring stuff
   err = start_http_server();
   if (err != ESP_OK) {
@@ -100,7 +110,7 @@ void app_main(void) {
   }
 
   // Start the socketcand translation server
-  err = socketcand_server_start(29536);
+  err = socketcand_server_start();
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "CRITICAL: Couldn't start socketcand server: %s",
              esp_err_to_name(err));
@@ -111,6 +121,15 @@ void app_main(void) {
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "CRITICAL: Couldn't start UDP beacon: %s",
              esp_err_to_name(err));
+  }
+
+  // Start the OpenCyphal node.
+  if (persistent_settings->enable_cyphal) {
+    err = cyphal_node_start(persistent_settings->cyphal_node_id);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "CRITICAL: Couldn't start OpenCyphal node: %s",
+              esp_err_to_name(err));
+    }
   }
 
   // Log network status after giving some time
