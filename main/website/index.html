@@ -83,7 +83,7 @@
         </noscript>
 
 
-        <h2>Network Settings</h2>
+        <h2>Settings</h2>
         <p>
             The current configuration is in the input fields.
             Change anything, and click submit to save the settings and reboot the adapter.
@@ -108,7 +108,16 @@
                 <tr>
                     <td>
                         <label for='eth_use_dhcp'>
-                            Use DHCP for ethernet:
+                            <details>
+                                <summary>Use DHCP for ethernet:</summary>
+                                <p>
+                                    If enabled, the ESP32's ethernet will ask for a DHCP server to dynamically assign it
+                                    an IP address, and the 3 IP fields below will be ignored.
+                                </p>
+                                <p>
+                                    If disabled, the ESP32's ethernet IP address will be manually set from the 3 IP fields below.
+                                </p>
+                            </details>
                         </label>
                     </td>
                     <td>
@@ -186,7 +195,16 @@
                 <tr>
                     <td>
                         <label for='wifi_use_dhcp'>
-                            Use DHCP for Wi-Fi:
+                            <details>
+                                <summary>Use DHCP for Wi-Fi:</summary>
+                                <p>
+                                    If enabled, the ESP32's Wi-Fi will ask for a DHCP server to dynamically assign it
+                                    an IP address, and the 3 IP fields below will be ignored.
+                                </p>
+                                <p>
+                                    If disabled, the ESP32's Wi-Fi IP address will be manually set from the 3 IP fields below.
+                                </p>
+                            </details>
                         </label>
                     </td>
                     <td>
@@ -251,7 +269,16 @@
                 <tr>
                     <td>
                         <label for='enable_cyphal'>
-                            Enable Cyphal Node:
+                            <details>
+                                <summary>Enable OpenCyphal node:</summary>
+                                <p>
+                                    If enabled, the ESP32 will broadcast an OpenCyphal heartbeat message every second,
+                                    using the node ID specified below.
+                                    
+                                    The ESP32 will also count the number of heartbeat's received.
+                                    That number will be listed in the status section below.
+                                </p>
+                            </details>
                         </label>
                     </td>
                     <td>
@@ -280,7 +307,7 @@
         </form>
 
 
-        <h2>Network Status</h2>
+        <h2>Status</h2>
         <div x-data="network_status_data" x-init="fetch_update">
             <template x-if="status">
                 <template x-for="key of Object.keys(status)">
