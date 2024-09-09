@@ -20,71 +20,59 @@ static char persistent_settings_json_data[1024];
 // Resets the persistent settings back to default.
 static void button_handler(void *button_handle, void *usr_data);
 
-const persistent_settings_t persistent_settings_default = {
-    .eth_use_dhcp = false,
-    .eth_ip_info.ip.addr = ESP_IP4TOADDR(192, 168, 2, 163),
-    .eth_ip_info.netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0),
-    .eth_ip_info.gw.addr = ESP_IP4TOADDR(192, 168, 2, 1),
-    .wifi_enabled = false,
-    .wifi_ssid = "ssid_changeme",
-    .wifi_pass = "password_changeme",
-    .wifi_use_dhcp = true,
-    .wifi_ip_info.ip.addr = ESP_IP4TOADDR(192, 168, 2, 163),
-    .wifi_ip_info.netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0),
-    .wifi_ip_info.gw.addr = ESP_IP4TOADDR(192, 168, 2, 1),
-    .can_bitrate = CAN_KBITS_500};
-
 esp_err_t persistent_settings_save(const persistent_settings_t *config) {
-  nvs_handle_t nvs_handle;
+  nvs_handle_t nvs;
   esp_err_t err;
 
-  err = nvs_open("main_config", NVS_READWRITE, &nvs_handle);
+  err = nvs_open("main_config", NVS_READWRITE, &nvs);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't open NVS.");
 
-  err =
-      nvs_set_blob(nvs_handle, "config", config, sizeof(persistent_settings_t));
+  err = nvs_set_blob(nvs, "config", config, sizeof(persistent_settings_t));
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't save value to NVS.");
 
-  err = nvs_commit(nvs_handle);
+  err = nvs_commit(nvs);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't commit settings to NVS storage.");
 
-  nvs_close(nvs_handle);
-  ESP_LOGI(TAG, "Restarting ESP32 to enact updated persistent settings.");
-  esp_restart();
+  nvs_close(nvs);
+
   return ESP_OK;
 }
 
-esp_err_t persistent_settings_load() {
-  esp_err_t err;
+esp_err_t persistent_settings_init_nvs(void) {
+  // Initialize the flash
+  esp_err_t err = nvs_flash_init();
 
-  // initialize the flash
-  err = nvs_flash_init();
+  // Erase NVS and retry on failure
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "NVS error: %s", esp_err_to_name(err));
     ESP_LOGE(TAG, "Erasing NVS flash in attempt to fix error.");
     nvs_flash_erase();
     err = nvs_flash_init();
   }
-  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't read NVS persistent settings");
+  return err;
+}
 
-  nvs_handle_t nvs_handle;
+esp_err_t persistent_settings_load(void) {
+  esp_err_t err;
+
+  nvs_handle_t nvs;
 
   // Open with read and write, because this allows
   // nvs_open to create the NVS namespace if it wasn't found.
-  err = nvs_open("main_config", NVS_READWRITE, &nvs_handle);
+  err = nvs_open("main_config", NVS_READWRITE, &nvs);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't open NVS.");
 
   size_t config_size = sizeof(persistent_settings_t);
-  err = nvs_get_blob(nvs_handle, "config", &persistent_settings_data,
-                     &config_size);
+  err = nvs_get_blob(nvs, "config", &persistent_settings_data, &config_size);
 
-  if (err == ESP_ERR_NVS_NOT_FOUND) {
+  if (err != ESP_OK) {
+    ESP_LOGW(TAG, "Couldn't load persistent settings: %s",
+             esp_err_to_name(err));
+    ESP_LOGW(TAG, "Using default settings instead.");
     persistent_settings_data = persistent_settings_default;
-  } else {
-    ESP_RETURN_ON_ERROR(err, TAG, "Couldn't read value from NVS.");
   }
 
-  nvs_close(nvs_handle);
+  nvs_close(nvs);
 
   persistent_settings = &persistent_settings_data;
 
@@ -92,6 +80,10 @@ esp_err_t persistent_settings_load() {
   int bytes_written = snprintf(
       persistent_settings_json_data, sizeof(persistent_settings_json_data),
       "{\n"
+
+      "\"hostname\": "
+      "\"%s\",\n"
+
       "\"eth_use_dhcp\": "
       "%s,\n"
 
@@ -135,6 +127,7 @@ esp_err_t persistent_settings_load() {
       "%d\n"
 
       "}\n",
+      persistent_settings->hostname,
       persistent_settings->eth_use_dhcp ? "true" : "false",
       IP2STR(&persistent_settings->eth_ip_info.ip),
       IP2STR(&persistent_settings->eth_ip_info.netmask),
@@ -150,6 +143,7 @@ esp_err_t persistent_settings_load() {
 
   if (bytes_written < 0 ||
       bytes_written >= sizeof(persistent_settings_json_data)) {
+    ESP_LOGE(TAG, "persistent_settings static json buffer too small.");
     return ESP_FAIL;
   }
   persistent_settings_json = persistent_settings_json_data;
@@ -191,10 +185,11 @@ esp_err_t persistent_settings_get_timing_config(
 }
 
 esp_err_t persistent_settings_setup_reset_button() {
-  button_config_t button_config = {
-      .type = BUTTON_TYPE_GPIO,
-      .long_press_time = 1000,
-      .gpio_button_config = {.gpio_num = 34, .active_level = 0}};
+  button_config_t button_config = {.type = BUTTON_TYPE_GPIO,
+                                   .long_press_time = 1000,
+                                   .gpio_button_config.gpio_num = 34,
+                                   .gpio_button_config.active_level = 0};
+
   button_handle_t button_handle = iot_button_create(&button_config);
   if (button_handle == NULL) {
     ESP_LOGE(TAG, "Couldn't create button.");
@@ -209,6 +204,11 @@ esp_err_t persistent_settings_setup_reset_button() {
 }
 
 static void button_handler(void *button_handle, void *usr_data) {
-  ESP_LOGI(TAG, "Button 1 held. Resetting settings to default, and rebooting.");
-  ESP_ERROR_CHECK(persistent_settings_save(&persistent_settings_default));
+  ESP_LOGI(TAG, "Button 1 held. Resetting settings to default and rebooting.");
+  esp_err_t err = persistent_settings_save(&persistent_settings_default);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Couldn't save persistent settings. Erasing all NVS memory.");
+    nvs_flash_erase();
+  }
+  esp_restart();
 }

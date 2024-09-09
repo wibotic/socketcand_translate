@@ -18,6 +18,10 @@ enum can_bitrate_setting {
 
 // Persistent settings for this socketcand adapter.
 typedef struct {
+  // Device hostname.
+  // Length 32 based on `esp_netif_set_hostname()` documentation.
+  char hostname[32];
+
   // Should ethernet use DHCP instead of static IP?
   bool eth_use_dhcp;
 
@@ -45,27 +49,46 @@ typedef struct {
 } persistent_settings_t;
 
 // Default `persistent_settings_t`.
-extern const persistent_settings_t persistent_settings_default;
+static const persistent_settings_t persistent_settings_default = {
+    .hostname = "socketcand-adapter",
+    .eth_use_dhcp = false,
+    .eth_ip_info.ip.addr = ESP_IP4TOADDR(192, 168, 2, 163),
+    .eth_ip_info.netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0),
+    .eth_ip_info.gw.addr = ESP_IP4TOADDR(192, 168, 2, 1),
+    .wifi_enabled = false,
+    .wifi_ssid = "ssid_changeme",
+    .wifi_pass = "password_changeme",
+    .wifi_use_dhcp = true,
+    .wifi_ip_info.ip.addr = ESP_IP4TOADDR(192, 168, 2, 163),
+    .wifi_ip_info.netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0),
+    .wifi_ip_info.gw.addr = ESP_IP4TOADDR(192, 168, 2, 1),
+    .can_bitrate = CAN_KBITS_500,
+};
 
 // Pointer to the current persistent settings.
-// Starts out NULL. Read current persistent settings using
-// `persistent_settings_load()`.
+// Starts out NULL. Call `persistent_settings_load()`
+// to fill this with the loaded settings.
 extern const persistent_settings_t* persistent_settings;
 
 // Pointer to the current persistent settings in JSON form.
-// Starts out NULL. Read current persistent settings using
-// `persistent_settings_load()`.
+// Starts out NULL. Call `persistent_settings_load()`
+// to fill this with the loaded settings.
 extern const char* persistent_settings_json;
 
-// Initializes NVS flash memory and reads the stored persistent settings.
+// Initialzies NVS flash memory with `nvs_flash_init()`.
+// Must be called before other `persistent_settings` functions.
+// On failure, erases all NVS memory, and retries.
+// On second failure, returns the error.
+esp_err_t persistent_settings_init_nvs(void);
+
 // Fills out `persistent_settings` and `persistent_settings_json`
-// with the loaded value.
-// Initializes them to the default if no saved settings were found.
-// Must not be called more than once.
+// with the current persistent settings.
+// Initializes them to `persistent_settings_default` if no saved settings were
+// found. NVS flash must be initialized before calling this.
 esp_err_t persistent_settings_load(void);
 
 // Saves the given settings to NVS flash memory.
-// On success, immediately restarts the ESP32 and doesn't return.
+// To enact the saved settings, call `esp_restart()`.
 // On failure, returns an error code.
 // NVS flash must be initialized before calling this.
 esp_err_t persistent_settings_save(const persistent_settings_t* settings);

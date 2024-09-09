@@ -269,7 +269,7 @@ static esp_err_t print_can_status(char *buf_out, size_t buflen,
       "\"Total number of failed message transmissions\": "
       "%ld,\n"
 
-      "\"Total number of failed message receptions\": "
+      "\"Total number of missed message receptions\": "
       "%ld,\n"
 
       "\"Total number of incoming messages lost due to FIFO overrun\": "
@@ -307,31 +307,29 @@ static esp_err_t print_socketcand_status(char *buf_out, size_t buflen,
       snprintf(buf_out, buflen,
                "{\n"
 
-               "\"Total socketcand frames received from internet\": "
-               "\"%lld\",\n"
+               "\"Total socketcand frames received over TCP\": "
+               "%lld,\n"
 
-               "\"Total invalid socketcand frames received from internet\": "
-               "\"%lld\",\n"
+               "\"Total invalid socketcand frames received over TCP\": "
+               "%lld,\n"
 
-               "\"Total frames sent to CAN bus\": "
-               "\"%lld\",\n"
+               "\"Total frames transmitted to CAN bus\": "
+               "%lld,\n"
 
                "\"Total CAN transmit fails\": "
-               "\"%lld\",\n"
+               "%lld,\n"
 
                "\"Total frames received from CAN bus\": "
-               "\"%lld\",\n"
+               "%lld,\n"
 
-               "\"Total socketcand frames sent to internet\": "
-               "\"%lld\"\n"
+               "\"Total socketcand frames sent over TCP\": "
+               "%lld\n"
 
                "}",
                status.socketcand_frames_received,
                status.invalid_socketcand_frames_received,
                status.can_bus_frames_sent, status.can_bus_frames_send_fails,
-               status.can_bus_frames_received, status.socketcand_frames_sent
-
-      );
+               status.can_bus_frames_received, status.socketcand_frames_sent);
 
   if (written < 0 || written >= buflen) {
     ESP_LOGE(TAG, "print_netif_status buflen too short.");
