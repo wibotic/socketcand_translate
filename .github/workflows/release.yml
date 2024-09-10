@@ -1,11 +1,10 @@
-name: Build
+name: Release
 
-# Run this action during every push and pull request.
+# Run this action during every tag push.
 on:
   push:
-    branches:
+    tags:
       - "**"
-  pull_request:
 
 # List of jobs that this action will run.
 jobs:
@@ -22,10 +21,10 @@ jobs:
 
       # Build the project using
       # esp-idf-ci-action.
-      - name: Test build
+      - name: Build Release
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: latest
+          esp_idf_version: v5.3.1
           target: esp32
           path: "/"
           command: |
@@ -34,3 +33,10 @@ jobs:
             mkdir merged &&
             esptool.py --chip esp32 merge_bin -o merged/esp32_socketcand_adapter.bin @flash_args &&
             cd ../
+
+      # If a tag was pushed, publish a release
+      # with the binaries produced by the previous step.
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/merged/esp32_socketcand_adapter.bin
