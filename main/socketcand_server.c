@@ -315,7 +315,7 @@ static void run_server_task(void *pvParameters) {
     // spawn a thread to serve the client with this index
     xTaskCreateStatic(serve_client_task, "serving_socketcand_client",
                       sizeof(client_handler_data->free_rtos_stack_1),
-                      (void *)client_handler_data, 10,
+                      (void *)client_handler_data, 11,
                       client_handler_data->free_rtos_stack_1,
                       &client_handler_data->free_rtos_mem_1);
   }
@@ -429,9 +429,6 @@ static void socketcand_to_bus_task(void *pvParameters) {
     server_status.socketcand_frames_received += 1;
     assert(xSemaphoreGive(server_status_mutex) == pdTRUE);
 
-    // Send the message to other TCP socketcand clients.
-    can_listener_enqueue_msg(&received_msg, client_handler_data->can_rx_queue);
-
     // Enqueue the frame for CAN transmission, with a timeout of 2 seconds
     err = twai_transmit(&received_msg, pdMS_TO_TICKS(2000));
     if (err == ESP_OK) {
@@ -446,7 +443,11 @@ static void socketcand_to_bus_task(void *pvParameters) {
       server_status.can_bus_frames_send_timeouts += 1;
       assert(xSemaphoreGive(server_status_mutex) == pdTRUE);
     }
+
+    // Send the message to other TCP socketcand clients.
+    can_listener_enqueue_msg(&received_msg, client_handler_data->can_rx_queue);
   }
+
   delete_serve_client_task(client_handler_data);
   return;
 }

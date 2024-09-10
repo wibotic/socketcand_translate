@@ -10,7 +10,7 @@ typedef struct {
   // Note: this does NOT need to be able to fit
   // a whole < > frame. It is only used to
   // reduce the number of expensive `read()` calls by buffering.
-  char buf[512];
+  char buf[4096];
 
   // Points to the first character in the buffer.
   // MUST be initialized to zero.

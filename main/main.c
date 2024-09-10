@@ -1,3 +1,5 @@
+#include "can_listener.h"
+#include "cyphal_node.h"
 #include "discovery_beacon.h"
 #include "driver_setup.h"
 #include "esp_log.h"
@@ -5,8 +7,6 @@
 #include "persistent_settings.h"
 #include "socketcand_server.h"
 #include "status_report.h"
-#include "can_listener.h"
-#include "cyphal_node.h"
 
 // Name that will be used for logging
 static const char* TAG = "main";
@@ -128,7 +128,7 @@ void app_main(void) {
     err = cyphal_node_start(persistent_settings->cyphal_node_id);
     if (err != ESP_OK) {
       ESP_LOGE(TAG, "CRITICAL: Couldn't start OpenCyphal node: %s",
-              esp_err_to_name(err));
+               esp_err_to_name(err));
     }
   }
 

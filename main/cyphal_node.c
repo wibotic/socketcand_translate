@@ -119,12 +119,12 @@ esp_err_t cyphal_node_start(uint8_t node_id) {
 
   // Spawn the OpenCyphal listener task
   xTaskCreateStatic(cyphal_listener_task, "cyphal_listener_task",
-                    sizeof(cyphal_listener_task_stack), NULL, 6,
+                    sizeof(cyphal_listener_task_stack), NULL, 3,
                     cyphal_listener_task_stack, &cyphal_listener_task_mem);
 
   // Spawn the OpenCyphal node task
   xTaskCreateStatic(cyphal_heartbeat_task, "cyphal_heartbeat_task",
-                    sizeof(cyphal_heartbeat_task_stack), NULL, 6,
+                    sizeof(cyphal_heartbeat_task_stack), NULL, 3,
                     cyphal_heartbeat_task_stack, &cyphal_heartbeat_task_mem);
 
   return ESP_OK;
