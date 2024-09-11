@@ -20,9 +20,10 @@ tmp_venv/bin/pip install nunavut
 
 echo
 echo "Compiling DSDLs to C headers in 'nunavut/'."
+rm -rf nunavut
 mkdir -p nunavut
 tmp_venv/bin/nnvg -O nunavut --target-language c public_regulated_data_types-master/uavcan
-tmp_venv/bin/nnvg -O nunavut --target-language c public_regulated_data_types-master/reg --lookup-dir public_regulated_data_types-master/uavcan
+# tmp_venv/bin/nnvg -O nunavut --target-language c public_regulated_data_types-master/reg --lookup-dir public_regulated_data_types-master/uavcan
 
 rm -rf tmp_venv
 rm -rf public_regulated_data_types-master

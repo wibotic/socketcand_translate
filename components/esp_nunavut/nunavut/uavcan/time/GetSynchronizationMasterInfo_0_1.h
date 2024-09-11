@@ -9,7 +9,7 @@
 //
 // Generator:     nunavut-2.3.1 (serialization was enabled)
 // Source file:   /home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types-master/uavcan/time/510.GetSynchronizationMasterInfo.0.1.dsdl
-// Generated at:  2024-09-11 20:16:38.668265 UTC
+// Generated at:  2024-09-11 21:29:53.328610 UTC
 // Is deprecated: no
 // Fixed port-ID: 510
 // Full name:     uavcan.time.GetSynchronizationMasterInfo

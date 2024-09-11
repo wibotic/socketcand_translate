@@ -9,7 +9,7 @@
 //
 // Generator:     nunavut-2.3.1 (serialization was enabled)
 // Source file:   /home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types-master/uavcan/register/Name.1.0.dsdl
-// Generated at:  2024-09-11 20:16:39.484761 UTC
+// Generated at:  2024-09-11 21:29:54.126482 UTC
 // Is deprecated: no
 // Fixed port-ID: None
 // Full name:     uavcan.register.Name

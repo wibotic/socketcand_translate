@@ -9,7 +9,7 @@
 //
 // Generator:     nunavut-2.3.1 (serialization was enabled)
 // Source file:   /home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types-master/uavcan/metatransport/udp/Endpoint.0.1.dsdl
-// Generated at:  2024-09-11 20:16:39.282784 UTC
+// Generated at:  2024-09-11 21:29:54.033487 UTC
 // Is deprecated: yes
 // Fixed port-ID: None
 // Full name:     uavcan.metatransport.udp.Endpoint

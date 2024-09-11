@@ -9,7 +9,7 @@
 //
 // Generator:     nunavut-2.3.1 (serialization was enabled)
 // Source file:   /home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types-master/uavcan/file/408.Read.1.1.dsdl
-// Generated at:  2024-09-11 20:16:38.638582 UTC
+// Generated at:  2024-09-11 21:29:53.299225 UTC
 // Is deprecated: no
 // Fixed port-ID: 408
 // Full name:     uavcan.file.Read

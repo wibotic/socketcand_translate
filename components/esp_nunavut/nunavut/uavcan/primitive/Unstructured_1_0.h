@@ -9,7 +9,7 @@
 //
 // Generator:     nunavut-2.3.1 (serialization was enabled)
 // Source file:   /home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types-master/uavcan/primitive/Unstructured.1.0.dsdl
-// Generated at:  2024-09-11 20:16:38.706090 UTC
+// Generated at:  2024-09-11 21:29:53.538071 UTC
 // Is deprecated: no
 // Fixed port-ID: None
 // Full name:     uavcan.primitive.Unstructured

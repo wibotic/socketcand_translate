@@ -9,7 +9,7 @@
 //
 // Generator:     nunavut-2.3.1 (serialization was enabled)
 // Source file:   /home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types-master/uavcan/file/407.Modify.1.0.dsdl
-// Generated at:  2024-09-11 20:16:38.622323 UTC
+// Generated at:  2024-09-11 21:29:53.283243 UTC
 // Is deprecated: yes
 // Fixed port-ID: 407
 // Full name:     uavcan.file.Modify
