@@ -8,8 +8,8 @@
 // are named with an underscore at the end, like foo_bar_().
 //
 // Generator:     nunavut-2.3.1 (serialization was enabled)
-// Source file:   /home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types/reg/udral/physics/electricity/Power.0.1.dsdl
-// Generated at:  2024-09-05 17:27:00.953512 UTC
+// Source file:   /home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types-master/reg/udral/physics/electricity/Power.0.1.dsdl
+// Generated at:  2024-09-11 20:16:40.855300 UTC
 // Is deprecated: no
 // Fixed port-ID: None
 // Full name:     reg.udral.physics.electricity.Power
@@ -17,9 +17,9 @@
 //
 // Platform
 //     python_implementation:  CPython
-//     python_version:  3.11.2
+//     python_version:  3.9.19
 //     python_release_level:  final
-//     python_build:  ('main', 'Aug 26 2024 07:20:54')
+//     python_build:  ('main', 'Jun 25 2024 17:03:42')
 //     python_compiler:  GCC 12.2.0
 //     python_revision:
 //     python_xoptions:  {}
@@ -41,19 +41,19 @@
 #include <uavcan/si/unit/voltage/Scalar_1_0.h>
 
 static_assert( NUNAVUT_SUPPORT_LANGUAGE_OPTION_TARGET_ENDIANNESS == 1693710260,
-              "/home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types/reg/udral/physics/electricity/Power.0.1.dsdl is trying to use a serialization library that was compiled with "
+              "/home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types-master/reg/udral/physics/electricity/Power.0.1.dsdl is trying to use a serialization library that was compiled with "
               "different language options. This is dangerous and therefore not allowed." );
 static_assert( NUNAVUT_SUPPORT_LANGUAGE_OPTION_OMIT_FLOAT_SERIALIZATION_SUPPORT == 0,
-              "/home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types/reg/udral/physics/electricity/Power.0.1.dsdl is trying to use a serialization library that was compiled with "
+              "/home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types-master/reg/udral/physics/electricity/Power.0.1.dsdl is trying to use a serialization library that was compiled with "
               "different language options. This is dangerous and therefore not allowed." );
 static_assert( NUNAVUT_SUPPORT_LANGUAGE_OPTION_ENABLE_SERIALIZATION_ASSERTS == 0,
-              "/home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types/reg/udral/physics/electricity/Power.0.1.dsdl is trying to use a serialization library that was compiled with "
+              "/home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types-master/reg/udral/physics/electricity/Power.0.1.dsdl is trying to use a serialization library that was compiled with "
               "different language options. This is dangerous and therefore not allowed." );
 static_assert( NUNAVUT_SUPPORT_LANGUAGE_OPTION_ENABLE_OVERRIDE_VARIABLE_ARRAY_CAPACITY == 0,
-              "/home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types/reg/udral/physics/electricity/Power.0.1.dsdl is trying to use a serialization library that was compiled with "
+              "/home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types-master/reg/udral/physics/electricity/Power.0.1.dsdl is trying to use a serialization library that was compiled with "
               "different language options. This is dangerous and therefore not allowed." );
 static_assert( NUNAVUT_SUPPORT_LANGUAGE_OPTION_CAST_FORMAT == 2368206204,
-              "/home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types/reg/udral/physics/electricity/Power.0.1.dsdl is trying to use a serialization library that was compiled with "
+              "/home/marcin/Documents/esp32_socketcand_adapter/components/esp_nunavut/public_regulated_data_types-master/reg/udral/physics/electricity/Power.0.1.dsdl is trying to use a serialization library that was compiled with "
               "different language options. This is dangerous and therefore not allowed." );
 
 #ifdef __cplusplus
