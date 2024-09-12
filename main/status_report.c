@@ -356,10 +356,10 @@ static esp_err_t print_application_status(char *buf_out, size_t buflen,
                "\"Total invalid socketcand frames received over TCP\": "
                "%lld,\n"
 
-               "\"Total frames transmitted to CAN bus\": "
+               "\"Total frames from socketcand transmitted to CAN bus\": "
                "%lld,\n"
 
-               "\"Total CAN transmit timeouts\": "
+               "\"Total frames from socketcand that timed out while being transmitted to CAN bus\": "
                "%lld,\n"
 
                "\"Total frames received from CAN bus\": "
