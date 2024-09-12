@@ -10,7 +10,10 @@ const network_status_data = {
             this.status = await (await fetch('/api/status', { signal: AbortSignal.timeout(5000) })).json();
             this.status_message = '';
         } catch (error) {
-            this.status_message = `ERROR: Couldn't fetch status from server: ${error}`;
+            this.status_message = `ERROR: Couldn't fetch status from server: ${error}. Reloading...`;
+            // If we couldn't fetch status for 5 seconds then the server is probably down.
+            // Let's reload, so that the user gets a clear indication that connection has been lost.
+            window.location.reload();
         }
         setTimeout(() => this.fetch_update(), 2000);
     }

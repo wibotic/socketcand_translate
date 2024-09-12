@@ -387,5 +387,30 @@ static esp_err_t update_persistent_settings_from_json(
     return err;
   }
 
+  // read enable_cyphal field
+  err = httpd_query_key_value(shared_post_buf, "enable_cyphal", arg_buf,
+                              sizeof(arg_buf));
+  if (err == ESP_OK) {
+    if (strncasecmp(arg_buf, "true", 4) == 0)
+      cnf->enable_cyphal = true;
+    else
+      cnf->enable_cyphal = false;
+  } else if (err != ESP_ERR_NOT_FOUND) {
+    return err;
+  }
+
+  // read cyphal_node_id field
+  err = httpd_query_key_value(shared_post_buf, "cyphal_node_id", arg_buf,
+                              sizeof(arg_buf));
+  if (err == ESP_OK) {
+    uint32_t num = strtol(arg_buf, NULL, 10);
+    if (num > 127) {
+      return ESP_FAIL;
+    }
+    cnf->cyphal_node_id = num;
+  } else if (err != ESP_ERR_NOT_FOUND) {
+    return err;
+  }
+
   return ESP_OK;
 }

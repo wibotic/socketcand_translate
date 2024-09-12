@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "driver/twai.h"
 
 #include "esp_err.h"
 
@@ -18,27 +19,12 @@
 // enough to hold all socketcand `send` and `frame` message strings.
 #define SOCKETCAND_RAW_MAX_LEN 64
 
-// A CAN frame
-typedef struct {
-  // CAN Frame ID
-  uint32_t id;
-  // Length of `data`
-  uint8_t len;
-  // CAN frame payload
-  uint8_t data[8];
-  // Is the ID extended?
-  bool ext;
-  // Unused field.
-  // The user may freely use it however they want.
-  uint8_t user_data;
-} socketcand_translate_frame_t;
-
 // Translates a `socketcand_translate_frame_t` to a socketcand string of form `<
 // frame can_id seconds.useconds [data]* >`.
 // Returns `ESP_ERR_NO_MEM` if `bufsize` is too small too fit the string.
 // https://github.com/linux-can/socketcand/blob/master/doc/protocol.md
 esp_err_t socketcand_translate_frame_to_string(
-    char *buf, size_t bufsize, const socketcand_translate_frame_t *can_frame,
+    char *buf, size_t bufsize, const twai_message_t *can_frame,
     uint32_t secs, uint32_t usecs);
 
 // Translates a null-terminated
@@ -46,7 +32,7 @@ esp_err_t socketcand_translate_frame_to_string(
 // `socketcand_translate_frame_t`.
 // Returns `ESP_FAIL` if `buf` has an invalid socketcand syntax.
 esp_err_t socketcand_translate_string_to_frame(
-    const char *buf, socketcand_translate_frame_t *msg);
+    const char *buf, twai_message_t *msg);
 
 // This function is used to mimic the socketcand protocol
 // for opening a rawmode connection.

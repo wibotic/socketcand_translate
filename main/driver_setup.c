@@ -238,9 +238,16 @@ esp_err_t driver_setup_can(const twai_timing_config_t *timing_config) {
 
   twai_general_config_t g_config =
       TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_5, GPIO_NUM_35, TWAI_MODE_NORMAL);
-  // Change this line to enable/disable logging:
-  g_config.alerts_enabled = TWAI_ALERT_AND_LOG | TWAI_ALERT_ABOVE_ERR_WARN |
-                            TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED;
+
+  // Sdkconfig configuration is set to put TWAI ISR into IRAM
+  // because this may reduce cache misses.
+  // This flag is required for that configuration.
+  g_config.intr_flags = ESP_INTR_FLAG_IRAM;
+  // Logging alerts doesn't work when TWAI ISR is in IRAM.
+  // To log alerts, change configuration to move it out of IRAM,
+  // and uncoment the lines below:
+  // g_config.alerts_enabled = TWAI_ALERT_AND_LOG | TWAI_ALERT_ABOVE_ERR_WARN |
+  //                           TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED;
   g_config.tx_queue_len = 32;
   g_config.rx_queue_len = 32;
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();

@@ -124,6 +124,12 @@ esp_err_t persistent_settings_load(void) {
       "\",\n"
 
       "\"can_bitrate\": "
+      "%d,\n"
+
+      "\"enable_cyphal\": "
+      "%s,\n"
+
+      "\"cyphal_node_id\": "
       "%d\n"
 
       "}\n",
@@ -139,7 +145,9 @@ esp_err_t persistent_settings_load(void) {
       IP2STR(&persistent_settings->wifi_ip_info.ip),
       IP2STR(&persistent_settings->wifi_ip_info.netmask),
       IP2STR(&persistent_settings->wifi_ip_info.gw),
-      persistent_settings->can_bitrate);
+      persistent_settings->can_bitrate,
+      persistent_settings->enable_cyphal ? "true" : "false",
+      persistent_settings->cyphal_node_id);
 
   if (bytes_written < 0 ||
       bytes_written >= sizeof(persistent_settings_json_data)) {

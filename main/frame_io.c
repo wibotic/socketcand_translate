@@ -42,7 +42,8 @@ esp_err_t frame_io_read_next_frame(frame_io_messenger *reader, char *buf,
 
       // the buffer is empty, so read more bytes
     } else {
-      int bytes_read = read(reader->socket_fd, reader->buf, sizeof(buf));
+      int bytes_read =
+          read(reader->socket_fd, reader->buf, sizeof(reader->buf));
 
       if (bytes_read < 0 && errno != EINTR && errno != EAGAIN &&
           errno != EWOULDBLOCK) {

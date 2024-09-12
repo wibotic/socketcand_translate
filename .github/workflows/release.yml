@@ -1,0 +1,42 @@
+name: Release
+
+# Run this action during every tag push.
+on:
+  push:
+    tags:
+      - "**"
+
+# List of jobs that this action will run.
+jobs:
+  # This job will build the project on ubuntu
+  # using esp-idf-ci-action.
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      # Build the project using
+      # esp-idf-ci-action.
+      - name: Build Release
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3.1
+          target: esp32
+          path: "/"
+          command: |
+            idf.py build &&
+            cd build &&
+            mkdir merged &&
+            esptool.py --chip esp32 merge_bin -o merged/esp32_socketcand_adapter.bin @flash_args &&
+            cd ../
+
+      # If a tag was pushed, publish a release
+      # with the binaries produced by the previous step.
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/merged/esp32_socketcand_adapter.bin

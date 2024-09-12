@@ -1,43 +1,36 @@
 name: Build
 
 # Run this action during every push and pull request.
-# 'workflow_call' lets this action be called by other actions.
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
 
 # List of jobs that this action will run.
 jobs:
   # This job will build the project on ubuntu
   # using esp-idf-ci-action.
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v4
-      with:
-        submodules: 'recursive'
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
 
-    # Build the project using
-    # esp-idf-ci-action.
-    - name: Build
-      uses: espressif/esp-idf-ci-action@v1
-      with:
-        esp_idf_version: latest
-        target: esp32
-        path: '/'
-        command: |
-          idf.py build &&
-          cd build &&
-          mkdir merged &&
-          esptool.py --chip esp32 merge_bin -o merged/esp32_socketcand_adapter.bin @flash_args &&
-          cd ../
-    
-    # If a tag was pushed, publish a release
-    # with the binaries produced by the previous step.
-    - name: Release
-      uses: softprops/action-gh-release@v2
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        files: build/merged/esp32_socketcand_adapter.bin
-
+      # Build the project using
+      # esp-idf-ci-action.
+      - name: Test build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: latest
+          target: esp32
+          path: "/"
+          command: |
+            idf.py build &&
+            cd build &&
+            mkdir merged &&
+            esptool.py --chip esp32 merge_bin -o merged/esp32_socketcand_adapter.bin @flash_args &&
+            cd ../

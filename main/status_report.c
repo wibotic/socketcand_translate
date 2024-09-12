@@ -1,5 +1,7 @@
 #include "status_report.h"
 
+#include "can_listener.h"
+#include "cyphal_node.h"
 #include "driver/twai.h"
 #include "esp_check.h"
 #include "esp_netif_types.h"
@@ -9,25 +11,31 @@
 #include "string.h"
 
 // Name that will be used for logging
-static const char *TAG = "socketcand_server";
+static const char *TAG = "status_report";
 
-// Prints the status of `netif` to `buf` in JSON format.
+// Prints the status of `netif` to `buf_out` in JSON format.
 // Returns an error if `buflen` was too small.
 // Increments `bytes_written` by the number of bytes written.
 static esp_err_t print_netif_status(esp_netif_t *netif, char *buf_out,
                                     size_t buflen, size_t *bytes_written);
 
-// Prints the status of the CAN bus to `buf` in JSON format.
+// Prints the status of the CAN bus to `buf_out` in JSON format.
 // Returns an error if `buflen` was too small.
 // Increments `bytes_written` by the number of bytes written.
 static esp_err_t print_can_status(char *buf_out, size_t buflen,
                                   size_t *bytes_written);
 
-// Prints the status of socketcand to `buf` in JSON format.
+// Prints the status of socketcand to `buf_out` in JSON format.
 // Returns an error if `buflen` was too small.
 // Increments `bytes_written` by the number of bytes written.
-static esp_err_t print_socketcand_status(char *buf_out, size_t buflen,
-                                         size_t *bytes_written);
+static esp_err_t print_application_status(char *buf_out, size_t buflen,
+                                          size_t *bytes_written);
+
+// Prints the status of the `cyphal_node` to `buf_out` in JSON format.
+// Returns an error if `buflen` was too small.
+// Increments `bytes_written` by the number of bytes written.
+static esp_err_t print_cyphal_status(char *buf_out, size_t buflen,
+                                     size_t *bytes_written);
 
 static char status_json[2048];
 static SemaphoreHandle_t status_json_mutex = NULL;
@@ -38,7 +46,7 @@ esp_err_t status_report_get(const char **json_out, esp_netif_t *eth_netif,
   if (status_json_mutex == NULL) {
     status_json_mutex = xSemaphoreCreateMutexStatic(&status_json_mutex_mem);
   }
-  xSemaphoreTake(status_json_mutex, portMAX_DELAY);
+  assert(xSemaphoreTake(status_json_mutex, portMAX_DELAY) == pdTRUE);
 
   esp_err_t err;
   int res;
@@ -86,7 +94,7 @@ esp_err_t status_report_get(const char **json_out, esp_netif_t *eth_netif,
   // Print the CAN bus status
   res = snprintf(status_json + written, sizeof(status_json) - written,
                  ",\n"
-                 "\"CAN Bus status\": ");
+                 "\"CAN Driver status\": ");
   written += res;
   if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
@@ -100,22 +108,36 @@ esp_err_t status_report_get(const char **json_out, esp_netif_t *eth_netif,
   // Print the Socketcand status
   res = snprintf(status_json + written, sizeof(status_json) - written,
                  ",\n"
-                 "\"Socketcand adapter status\": ");
+                 "\"Application status\": ");
   written += res;
   if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
     return ESP_ERR_NO_MEM;
   }
 
-  res = print_socketcand_status(status_json + written,
-                                sizeof(status_json) - written, &written);
+  // Print the application status
+  res = print_application_status(status_json + written,
+                                 sizeof(status_json) - written, &written);
   ESP_RETURN_ON_ERROR(err, TAG, "Couldn't print socketcand status.");
+
+  res = snprintf(status_json + written, sizeof(status_json) - written,
+                 ",\n"
+                 "\"OpenCyphal Node status\": ");
+  written += res;
+  if (res < 0 || written >= sizeof(status_json)) {
+    ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
+    return ESP_ERR_NO_MEM;
+  }
+
+  // Print the OpenCyphal status
+  res = print_cyphal_status(status_json + written,
+                                 sizeof(status_json) - written, &written);
+  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't print OpenCyphal status.");
 
   res = snprintf(status_json + written, sizeof(status_json) - written,
                  "\n"
                  "}\n");
   written += res;
-
   if (res < 0 || written >= sizeof(status_json)) {
     ESP_LOGE(TAG, "driver_setup_get_status_json() buflen too small.");
     return ESP_ERR_NO_MEM;
@@ -129,12 +151,10 @@ esp_err_t status_report_release() {
   if (status_json_mutex == NULL) {
     return ESP_FAIL;
   }
-  if (xSemaphoreGive(status_json_mutex) != pdTRUE) {
-    ESP_LOGE(TAG, "Error releasing driver setup JSON status mutex.");
-    return ESP_FAIL;
-  } else {
-    return ESP_OK;
-  }
+
+  assert(xSemaphoreGive(status_json_mutex) == pdTRUE);
+
+  return ESP_OK;
 }
 
 static esp_err_t print_netif_status(esp_netif_t *netif, char *buf_out,
@@ -269,7 +289,7 @@ static esp_err_t print_can_status(char *buf_out, size_t buflen,
       "\"Total number of failed message transmissions\": "
       "%ld,\n"
 
-      "\"Total number of missed message receptions\": "
+      "\"Total number of failed message receptions\": "
       "%ld,\n"
 
       "\"Total number of incoming messages lost due to FIFO overrun\": "
@@ -297,11 +317,34 @@ static esp_err_t print_can_status(char *buf_out, size_t buflen,
   return ESP_OK;
 }
 
-static esp_err_t print_socketcand_status(char *buf_out, size_t buflen,
-                                         size_t *bytes_written) {
-  socketcand_server_status_t status;
-  esp_err_t err = socketcand_server_status(&status);
-  ESP_RETURN_ON_ERROR(err, TAG, "Couldn't get socketcand server status.");
+static esp_err_t print_application_status(char *buf_out, size_t buflen,
+                                          size_t *bytes_written) {
+  socketcand_server_status_t socketcand_status;
+  esp_err_t err = socketcand_server_status(&socketcand_status);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Couldn't get socketcand server status: %s",
+             esp_err_to_name(err));
+    int written = snprintf(buf_out, buflen, "\"Not running\"");
+    if (written < 0 || written >= buflen) {
+      ESP_LOGE(TAG, "print_application_status buflen too short.");
+      return ESP_ERR_NO_MEM;
+    }
+    *bytes_written += written;
+    return ESP_OK;
+  }
+
+  can_listener_status_t can_listener_status;
+  err = can_listener_get_status(&can_listener_status);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Couldn't get CAN listener status: %s", esp_err_to_name(err));
+    int written = snprintf(buf_out, buflen, "\"Not running\"");
+    if (written < 0 || written >= buflen) {
+      ESP_LOGE(TAG, "print_application_status buflen too short.");
+      return ESP_ERR_NO_MEM;
+    }
+    *bytes_written += written;
+    return ESP_OK;
+  }
 
   int written =
       snprintf(buf_out, buflen,
@@ -313,26 +356,72 @@ static esp_err_t print_socketcand_status(char *buf_out, size_t buflen,
                "\"Total invalid socketcand frames received over TCP\": "
                "%lld,\n"
 
-               "\"Total frames transmitted to CAN bus\": "
+               "\"Total frames from socketcand transmitted to CAN bus\": "
                "%lld,\n"
 
-               "\"Total CAN transmit fails\": "
+               "\"Total frames from socketcand that timed out while being transmitted to CAN bus\": "
                "%lld,\n"
 
                "\"Total frames received from CAN bus\": "
+               "%lld,\n"
+
+               "\"Total received CAN frames dropped\": "
                "%lld,\n"
 
                "\"Total socketcand frames sent over TCP\": "
                "%lld\n"
 
                "}",
-               status.socketcand_frames_received,
-               status.invalid_socketcand_frames_received,
-               status.can_bus_frames_sent, status.can_bus_frames_send_fails,
-               status.can_bus_frames_received, status.socketcand_frames_sent);
+               socketcand_status.socketcand_frames_received,
+               socketcand_status.invalid_socketcand_frames_received,
+               socketcand_status.can_bus_frames_sent,
+               socketcand_status.can_bus_frames_send_timeouts,
+               can_listener_status.can_bus_frames_received,
+               can_listener_status.can_bus_incoming_frames_dropped,
+               socketcand_status.socketcand_frames_sent);
 
   if (written < 0 || written >= buflen) {
-    ESP_LOGE(TAG, "print_netif_status buflen too short.");
+    ESP_LOGE(TAG, "print_application_status buflen too short.");
+    return ESP_ERR_NO_MEM;
+  }
+
+  *bytes_written += written;
+  return ESP_OK;
+}
+
+static esp_err_t print_cyphal_status(char *buf_out, size_t buflen,
+                                     size_t *bytes_written) {
+
+  cyphal_node_status_t cyphal_status;
+  esp_err_t err = cyphal_node_get_status(&cyphal_status);
+    if (err != ESP_OK) {
+    int written = snprintf(buf_out, buflen, "\"Not running\"");
+    if (written < 0 || written >= buflen) {
+      ESP_LOGE(TAG, "print_application_status buflen too short.");
+      return ESP_ERR_NO_MEM;
+    }
+    *bytes_written += written;
+
+    return ESP_OK;
+  }
+
+  int written =
+      snprintf(buf_out, buflen,
+               "{\n"
+
+               "\"Total OpenCyphal heartbeats sent\": "
+               "%lld,\n"
+
+               "\"Total OpenCyphal heartbeats received\": "
+               "%lld\n"
+
+               "}",
+               cyphal_status.heartbeats_sent,
+               cyphal_status.heartbeats_received
+               );
+
+  if (written < 0 || written >= buflen) {
+    ESP_LOGE(TAG, "print_cyphal_status buflen too short.");
     return ESP_ERR_NO_MEM;
   }
 
