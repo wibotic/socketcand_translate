@@ -220,22 +220,21 @@ static void cyphal_heartbeat_task(void* pvParameters) {
       memcpy(tx_frame.data, tx_item->frame.payload,
              tx_item->frame.payload_size);
 
-      esp_err_t err = twai_transmit(&tx_frame, pdMS_TO_TICKS(2000));
-      if (err != ESP_OK) {
+      esp_err_t err = twai_transmit(&tx_frame, pdMS_TO_TICKS(portMAX_DELAY));
+      while (err != ESP_OK) {
         ESP_LOGE(TAG, "Couldn't transmit OpenCyphal frame: %s",
                  esp_err_to_name(err));
-        break;
+        err = twai_transmit(&tx_frame, pdMS_TO_TICKS(portMAX_DELAY));
       }
+      
       can_listener_enqueue_msg(&tx_frame, can_rx_queue);
 
       free_mem(&canard_instance, canardTxPop(&canard_tx_queue, tx_item));
     }
 
-    // If successful, increment the heartbeat sent counter
-    if (canardTxPeek(&canard_tx_queue) == NULL) {
-      assert(xSemaphoreTake(cyphal_node_status_mutex, portMAX_DELAY) == pdTRUE);
-      cyphal_node_status.heartbeats_sent += 1;
-      assert(xSemaphoreGive(cyphal_node_status_mutex) == pdTRUE);
-    }
+    // Finished sending heartbeat, so let's increment the counter.
+    assert(xSemaphoreTake(cyphal_node_status_mutex, portMAX_DELAY) == pdTRUE);
+    cyphal_node_status.heartbeats_sent += 1;
+    assert(xSemaphoreGive(cyphal_node_status_mutex) == pdTRUE);
   }
 }
