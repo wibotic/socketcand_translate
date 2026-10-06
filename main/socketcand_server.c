@@ -297,6 +297,16 @@ static void run_server_task(void *pvParameters) {
     ESP_LOGI(TAG, "Accepted socketcand client TCP connection from: %s",
              inet_ntoa(source_addr.sin_addr));
 
+    // Disable Nagle's algorithm on the client socket to reduce latency.
+    // TCP_NODELAY on the listening socket (set above) does not carry over to
+    // sockets returned by accept(); each one needs it set individually.
+    int tcp_nodelay = 1;
+    if (setsockopt(client_sock, IPPROTO_TCP, TCP_NODELAY, &tcp_nodelay,
+                   sizeof(tcp_nodelay)) != 0) {
+      ESP_LOGE(TAG, "Unable to set TCP_NODELAY on client socket: errno %d",
+               errno);
+    }
+
     // Get a pointer to an unused `client_handler_data_t`.
     client_handler_data_t *client_handler_data =
         get_client_handler_data(client_sock);
