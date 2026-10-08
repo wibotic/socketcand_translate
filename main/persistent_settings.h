@@ -57,10 +57,12 @@ typedef struct {
 // Default `persistent_settings_t`.
 static const persistent_settings_t persistent_settings_default = {
     .hostname = "socketcand-adapter",
+    
     .eth_use_dhcp = false,
     .eth_ip_info.ip.addr = ESP_IP4TOADDR(192, 168, 2, 163),
     .eth_ip_info.netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0),
     .eth_ip_info.gw.addr = ESP_IP4TOADDR(192, 168, 2, 1),
+
     .wifi_enabled = false,
     .wifi_ssid = "ssid_changeme",
     .wifi_pass = "password_changeme",
@@ -68,6 +70,7 @@ static const persistent_settings_t persistent_settings_default = {
     .wifi_ip_info.ip.addr = ESP_IP4TOADDR(192, 168, 2, 163),
     .wifi_ip_info.netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0),
     .wifi_ip_info.gw.addr = ESP_IP4TOADDR(192, 168, 2, 1),
+
     .can_bitrate = CAN_KBITS_500,
     .enable_cyphal = false,
     .cyphal_node_id = 98,

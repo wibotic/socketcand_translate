@@ -1,3 +1,5 @@
+// This file created to save settings to a partition in flash memory when power is off
+
 #include "persistent_settings.h"
 
 #include "esp_check.h"
@@ -20,6 +22,7 @@ static char persistent_settings_json_data[1024];
 // Resets the persistent settings back to default.
 static void button_handler(void *button_handle, void *usr_data);
 
+// Write settings struct into flash. Web page submit and reset button calls this
 esp_err_t persistent_settings_save(const persistent_settings_t *config) {
   nvs_handle_t nvs;
   esp_err_t err;
@@ -38,6 +41,7 @@ esp_err_t persistent_settings_save(const persistent_settings_t *config) {
   return ESP_OK;
 }
 
+// Prepare the NVS system
 esp_err_t persistent_settings_init_nvs(void) {
   // Initialize the flash
   esp_err_t err = nvs_flash_init();
@@ -52,6 +56,7 @@ esp_err_t persistent_settings_init_nvs(void) {
   return err;
 }
 
+// Get the settings, if error / nothing inside then use the default setting
 esp_err_t persistent_settings_load(void) {
   esp_err_t err;
 
