@@ -22,6 +22,10 @@ static O1HeapInstance* o1_heap_instance = NULL;
 static uint8_t o1_heap_mem[HEAP_MEM_SIZE]
     __attribute__((aligned(O1HEAP_ALIGNMENT)));
 
+// Guards every access to the O1 heap.
+static SemaphoreHandle_t o1_heap_mutex = NULL;
+static StaticSemaphore_t o1_heap_mutex_mem;
+
 // Queue with stream of incoming CAN frames.
 static QueueHandle_t can_rx_queue;
 
@@ -66,14 +70,36 @@ esp_err_t cyphal_node_get_status(cyphal_node_status_t* status_out) {
   return ESP_OK;
 }
 
+// Locks the O1 heap. o1heap is not thread-safe, and both OpenCyphal tasks
+// allocate and free, so every access to it must hold this lock.
+// The calls are kept outside of `assert` so the lock still works
+// if assertions are compiled out.
+static void o1_heap_lock(void) {
+  BaseType_t taken = xSemaphoreTake(o1_heap_mutex, portMAX_DELAY);
+  assert(taken == pdTRUE);
+  (void)taken;
+}
+
+// Unlocks the O1 heap.
+static void o1_heap_unlock(void) {
+  BaseType_t given = xSemaphoreGive(o1_heap_mutex);
+  assert(given == pdTRUE);
+  (void)given;
+}
+
 // Allocates memory on the o1 heap of this `CanardInstance`.
 static void* allocate_mem(CanardInstance* ins, size_t amount) {
-  return o1heapAllocate(o1_heap_instance, amount);
+  o1_heap_lock();
+  void* pointer = o1heapAllocate(o1_heap_instance, amount);
+  o1_heap_unlock();
+  return pointer;
 }
 
 // Frees memory on the o1 heap of this `CanardInstance`.
 static void free_mem(CanardInstance* ins, void* pointer) {
+  o1_heap_lock();
   o1heapFree(o1_heap_instance, pointer);
+  o1_heap_unlock();
 }
 
 esp_err_t cyphal_node_start(uint8_t node_id) {
@@ -81,6 +107,14 @@ esp_err_t cyphal_node_start(uint8_t node_id) {
       xSemaphoreCreateMutexStatic(&cyphal_node_status_mutex_mem);
   if (cyphal_node_status_mutex == NULL) {
     ESP_LOGE(TAG, "Unreachable. cyphal_node_status_mutex couldn't be created.");
+    return ESP_FAIL;
+  }
+
+  // Create the mutex that guards the O1 heap. It must exist before
+  // anything allocates, including `canardRxSubscribe` below.
+  o1_heap_mutex = xSemaphoreCreateMutexStatic(&o1_heap_mutex_mem);
+  if (o1_heap_mutex == NULL) {
+    ESP_LOGE(TAG, "Unreachable. o1_heap_mutex couldn't be created.");
     return ESP_FAIL;
   }
 
