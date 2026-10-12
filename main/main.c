@@ -35,8 +35,9 @@ void app_main(void) {
       "Hold button BUT1 for one second to reset these settings to default.");
 
   esp_err_t err;
-  const esp_netif_ip_info_t* ip_info_setting;
+  const esp_netif_ip_info_t* ip_info_setting; 
 
+  // ================== WIFI (optional) ======================
   // start wifi driver if enabled
   if (persistent_settings->wifi_enabled) {
     // Enable or disable DHCP
@@ -56,6 +57,7 @@ void app_main(void) {
     }
   }
 
+  // ================== Ethernet ==================
   // Ethernet driver setup will fail unless the ethernet hardware
   // accquires a clock signal, which takes a few milliseconds.
   vTaskDelay(pdMS_TO_TICKS(200));
@@ -79,7 +81,6 @@ void app_main(void) {
   twai_timing_config_t timing_config;
   err = persistent_settings_get_timing_config(persistent_settings->can_bitrate,
                                               &timing_config);
-
   if (err != ESP_OK) {
     ESP_LOGE(
         TAG,
