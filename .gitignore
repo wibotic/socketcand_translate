@@ -4,15 +4,3 @@ managed_components/
 dependencies.lock
 .vscode/
 sdkconfig
-# Claude Code harness
-.claude/
-templates/
-george-setup/
-.worktreeinclude
-CLAUDE.md
-CLAUDE.local.md
-.mcp.json
-docs/specs/
-docs/plans/
-docs/DECISIONS.md
-docs/knowledge/
