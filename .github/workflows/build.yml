@@ -25,7 +25,7 @@ jobs:
       - name: Test build
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: latest
+          esp_idf_version: v5.3.1
           target: esp32
           path: "/"
           command: |
