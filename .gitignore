@@ -4,3 +4,4 @@ managed_components/
 dependencies.lock
 .vscode/
 sdkconfig
+esp32_socketcand_adapter.bin
